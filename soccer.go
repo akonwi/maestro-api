@@ -27,9 +27,13 @@ type teamResponse struct {
 }
 
 type snapshot struct {
-	NumGames        int     `json:"numGames"`
-	GoalsAgainst    int     `json:"goalsAgainst"`
-	AvgGoalsAgainst float32 `json:"averageGoalsAgainst"`
+	NumGames              int     `json:"numGames"`
+	GoalsAgainst          int     `json:"goalsAgainst"`
+	AvgGoalsAgainst       float32 `json:"averageGoalsAgainst"`
+	CleanSheetRatio       float32 `json:"cleanSheetRatio"`
+	DirtySheetRatio       float32 `json:"dirtySheetRatio"`
+	TwoGoalsConcededRatio float32 `json:"twoGoalsConceededRatio"`
+	XOverTwo              float32 `json:"x1.5+GA"`
 
 	CleanSheets struct {
 		Total int `json:"total"`
@@ -114,6 +118,11 @@ func main() {
 	}
 
 	snap.AvgGoalsAgainst = float32(snap.GoalsAgainst) / float32(snap.NumGames)
+	snap.CleanSheetRatio = float32(snap.CleanSheets.Total) / float32(snap.NumGames)
+	snap.DirtySheetRatio = 1 - snap.CleanSheetRatio
+	snap.TwoGoalsConcededRatio = float32(snap.TwoPlusGoalsConceded.Total) / float32(snap.NumGames)
+	// DirtySheetRatio * (TwoPlusGoalsConceded.Total / (OneGoalConceded.Total + TwoPlusGoalsConceded.Total))
+	snap.XOverTwo = snap.DirtySheetRatio * (float32(snap.TwoPlusGoalsConceded.Total) / float32(snap.OneGoalConceded.Total+snap.TwoPlusGoalsConceded.Total))
 	pretty, err := json.MarshalIndent(snap, "", "  ")
 	fmt.Printf("%s\n", pretty)
 }
