@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 )
 
 const api_key string = "IaF7Bu1ERddp13pUOg0l-vfc95MvbWMFUAohi_yk840"
@@ -24,6 +25,11 @@ type teamResponse struct {
 	TeamSchedule struct {
 		Data []match `json:"data"`
 	} `json:"team_schedule"`
+}
+
+type log struct {
+	TeamName string           `json:"name"`
+	Entries  map[int]snapshot `json:"entries"`
 }
 
 type snapshot struct {
@@ -123,6 +129,44 @@ func main() {
 	snap.TwoGoalsConcededRatio = float32(snap.TwoPlusGoalsConceded.Total) / float32(snap.NumGames)
 	// DirtySheetRatio * (TwoPlusGoalsConceded.Total / (OneGoalConceded.Total + TwoPlusGoalsConceded.Total))
 	snap.XOverTwo = snap.DirtySheetRatio * (float32(snap.TwoPlusGoalsConceded.Total) / float32(snap.OneGoalConceded.Total+snap.TwoPlusGoalsConceded.Total))
-	pretty, err := json.MarshalIndent(snap, "", "  ")
-	fmt.Printf("%s\n", pretty)
+	saveSnapshot(man_united, "Manchester United", snap)
+}
+
+func saveSnapshot(teamId, name string, snap snapshot) {
+	err := os.Mkdir("./db", 0755)
+	if !os.IsExist(err) {
+		panic("Error creating directory: " + err.Error())
+	}
+
+	filename := fmt.Sprintf("./db/%s.json", teamId)
+	var file *os.File = nil
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		file, err = os.Create(filename)
+		if err != nil {
+			panic(fmt.Errorf("Error creating db file for %s: %s", teamId, err))
+		}
+		file.Write([]byte(`{"name": "` + name + `", "entries": {}}`))
+	}
+
+	log := log{}
+
+	contents, err := ioutil.ReadFile(filename)
+	if err != nil {
+		panic(fmt.Errorf("Error reading db file - %s: %s", filename, err))
+	}
+	if err := json.Unmarshal(contents, &log); err != nil {
+		panic(fmt.Errorf("Error parsing db file - %s: %s", filename, err))
+	}
+
+	log.Entries[snap.NumGames] = snap
+
+	pretty, err := json.MarshalIndent(log, "", "  ")
+	if err != nil {
+		panic(fmt.Errorf("Error stringifying log for %s: %s", name, err))
+	}
+
+	if err := os.WriteFile(filename, pretty, 0644); err != nil {
+		panic(fmt.Errorf("Error writing file %s: %s", filename, err))
+	}
+	fmt.Printf("Snapshot for %s saved\n", name)
 }
