@@ -1,0 +1,83 @@
+{
+  "name": "Tottenham Hotspurs",
+  "entries": {
+    "26": {
+      "numGames": 26,
+      "goalsAgainst": 38,
+      "averageGoalsAgainst": 1.4615384,
+      "cleanSheetRatio": 0.23076923,
+      "dirtySheetRatio": 0.7692308,
+      "twoGoalsConceededRatio": 0.3846154,
+      "x1.5+GA": 0.3846154,
+      "cleanSheets": {
+        "total": 6,
+        "wins": 6,
+        "draws": 0
+      },
+      "oneGoalConceded": {
+        "total": 10,
+        "wins": 4,
+        "draws": 2,
+        "losses": 4
+      },
+      "twoPlusGoalsConceded": {
+        "total": 10,
+        "wins": 0,
+        "draws": 1,
+        "losses": 9
+      }
+    },
+    "27": {
+      "numGames": 27,
+      "goalsAgainst": 39,
+      "averageGoalsAgainst": 1.4444444,
+      "cleanSheetRatio": 0.22222222,
+      "dirtySheetRatio": 0.7777778,
+      "twoGoalsConceededRatio": 0.37037036,
+      "x1.5+GA": 0.3703704,
+      "cleanSheets": {
+        "total": 6,
+        "wins": 6,
+        "draws": 0
+      },
+      "oneGoalConceded": {
+        "total": 11,
+        "wins": 4,
+        "draws": 2,
+        "losses": 5
+      },
+      "twoPlusGoalsConceded": {
+        "total": 10,
+        "wins": 0,
+        "draws": 1,
+        "losses": 9
+      }
+    },
+    "29": {
+      "numGames": 29,
+      "goalsAgainst": 43,
+      "averageGoalsAgainst": 1.4827586,
+      "cleanSheetRatio": 0.20689656,
+      "dirtySheetRatio": 0.79310346,
+      "twoGoalsConceededRatio": 0.41379312,
+      "x1.5+GA": 0.41379312,
+      "cleanSheets": {
+        "total": 6,
+        "wins": 6,
+        "draws": 0
+      },
+      "oneGoalConceded": {
+        "total": 11,
+        "wins": 4,
+        "draws": 2,
+        "losses": 5
+      },
+      "twoPlusGoalsConceded": {
+        "total": 12,
+        "wins": 0,
+        "draws": 2,
+        "losses": 10
+      }
+    }
+  }
+}

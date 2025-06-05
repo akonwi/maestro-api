@@ -3,7 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -87,7 +87,7 @@ func main() {
 		}
 		defer res.Body.Close()
 
-		body, err := ioutil.ReadAll(res.Body)
+		body, err := io.ReadAll(res.Body)
 		if err != nil {
 			panic("Error reading response body: " + err.Error())
 		}
@@ -167,7 +167,7 @@ func saveSnapshot(teamId, name string, snap snapshot) {
 
 	log := log{}
 
-	contents, err := ioutil.ReadFile(filename)
+	contents, err := os.ReadFile(filename)
 	if err != nil {
 		panic(fmt.Errorf("Error reading db file - %s: %s", filename, err))
 	}
