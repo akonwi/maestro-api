@@ -33,6 +33,7 @@ struct GoalConcededCounts {
 }
 
 struct Snapshot {
+  name: Str,
 	numGames: Int,
 	goalsAgainst: Int,
 	averageGoalsAgainst: Float,
@@ -43,11 +44,6 @@ struct Snapshot {
 	cleanSheets: CleanSheetCounts,
 	oneGoalConceded: GoalConcededCounts,
 	twoPlusGoalsConceded: GoalConcededCounts,
-}
-
-struct Log {
-	name: Str,
-	entries: [Int:Snapshot]
 }
 
 let api_key = "IaF7Bu1ERddp13pUOg0l-vfc95MvbWMFUAohi_yk840"
@@ -61,11 +57,12 @@ let teams = [
   "Aston Villa": "8602292d"
 ]
 
-fn calculate(matches: [Match]) Snapshot {
+fn calculate(name: Str,matches: [Match]) Snapshot {
   mut cleanSheets = CleanSheetCounts{total: 0, wins: 0, draws: 0}
   mut oneGoalConceded = GoalConcededCounts{total: 0, wins: 0, draws: 0, losses: 0}
   mut twoPlusGoalsConceded = GoalConcededCounts{total: 0, wins: 0, draws: 0, losses: 0}
   mut snapshot = Snapshot{
+    name: name,
     numGames: 0,
     goalsAgainst: 0,
     averageGoalsAgainst: 0.0,
@@ -144,11 +141,11 @@ fn main() {
           true => {
             match resp.json<TeamResp>() {
               ok(team) => {
-                let snap = calculate(team.team_schedule.data)
+                let snap = calculate(name, team.team_schedule.data)
                 match json::encode(snap) {
                   ok(str) => {
-                    fs::create_file("./db/{id}.json")
-                    if not fs::write("./db/{id}.json", str) {
+                    fs::create_file("./snaps/{id}.json")
+                    if not fs::write("./snaps/{id}.json", str) {
                       io::print("failed to save for {name}")
                     }
                   },
