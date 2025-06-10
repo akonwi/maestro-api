@@ -1,0 +1,169 @@
+use ard/fs
+use ard/http
+use ard/io
+use ard/json
+
+struct Match {
+	match_id: Str,
+	league_id: Int,
+	result: Str,
+	gf: Int,
+	ga: Int
+}
+
+struct TeamScheduleResp {
+  data: [Match]
+}
+
+struct TeamResp {
+	team_schedule: TeamScheduleResp
+}
+
+struct CleanSheetCounts {
+  total: Int,
+  wins: Int,
+  draws: Int,
+}
+
+struct GoalConcededCounts {
+  total: Int,
+  wins: Int,
+  draws: Int,
+  losses: Int,
+}
+
+struct Snapshot {
+	numGames: Int,
+	goalsAgainst: Int,
+	averageGoalsAgainst: Float,
+	cleanSheetRatio: Float,
+	dirtySheetRatio: Float,
+	twoGoalsConcededRatio: Float,
+	xTwoAgainst: Float,
+	cleanSheets: CleanSheetCounts,
+	oneGoalConceded: GoalConcededCounts,
+	twoPlusGoalsConceded: GoalConcededCounts,
+}
+
+struct Log {
+	name: Str,
+	entries: [Int:Snapshot]
+}
+
+let api_key = "IaF7Bu1ERddp13pUOg0l-vfc95MvbWMFUAohi_yk840"
+let england = "ENG"
+let premier_league = 9
+let teams = [
+  "Manchester United": "19538871",
+  "Wolverhampton Wanderers": "8cec06e1",
+  "Ipswich Town": "b74092de",
+  "Tottenham Hotspurs": "361ca564",
+  "Aston Villa": "8602292d"
+]
+
+fn calculate(matches: [Match]) Snapshot {
+  mut cleanSheets = CleanSheetCounts{total: 0, wins: 0, draws: 0}
+  mut oneGoalConceded = GoalConcededCounts{total: 0, wins: 0, draws: 0, losses: 0}
+  mut twoPlusGoalsConceded = GoalConcededCounts{total: 0, wins: 0, draws: 0, losses: 0}
+  mut snapshot = Snapshot{
+    numGames: 0,
+    goalsAgainst: 0,
+    averageGoalsAgainst: 0.0,
+    cleanSheetRatio: 0.0,
+    dirtySheetRatio: 0.0,
+    twoGoalsConcededRatio: 0.0,
+    xTwoAgainst: 0.0,
+    cleanSheets: cleanSheets,
+    oneGoalConceded: oneGoalConceded,
+    twoPlusGoalsConceded: twoPlusGoalsConceded,
+  }
+  mut num_games = 0
+  mut goals_against = 0
+  mut clean_sheets = 0
+
+  for m in matches {
+    if m.league_id == premier_league {
+      snapshot.numGames =+ 1
+      snapshot.goalsAgainst =+ m.ga
+
+      if m.ga == 0 {
+        cleanSheets.total =+ 1
+        if m.result == "W" {
+          cleanSheets.wins =+ 1
+        } else {
+          cleanSheets.draws =+ 1
+        }
+      }
+
+      if m.ga == 1 {
+        oneGoalConceded.total =+ 1
+        if m.result == "W" {
+          oneGoalConceded.wins =+ 1
+        } else if m.result == "D" {
+          oneGoalConceded.draws =+ 1
+        } else {
+          oneGoalConceded.losses =+ 1
+        }
+      }
+
+      if m.ga > 1 {
+        twoPlusGoalsConceded.total =+ 1
+        if m.result == "W" {
+          twoPlusGoalsConceded.wins =+ 1
+        } else if m.result == "D" {
+          twoPlusGoalsConceded.draws =+ 1
+        } else {
+          twoPlusGoalsConceded.losses =+ 1
+        }
+      }
+
+      snapshot.averageGoalsAgainst = Float::from_int(snapshot.goalsAgainst) / Float::from_int(snapshot.numGames)
+      snapshot.cleanSheetRatio = Float::from_int(snapshot.cleanSheets.total) / Float::from_int(snapshot.numGames)
+      snapshot.dirtySheetRatio = 1.0 - snapshot.cleanSheetRatio
+      snapshot.twoGoalsConcededRatio = Float::from_int(snapshot.twoPlusGoalsConceded.total) / Float::from_int(snapshot.numGames)
+    }
+  }
+
+  snapshot
+}
+
+fn main() {
+  for name, id in teams {
+    io::print("Calculating for {name}")
+    let res = http::send(http::Request{
+      method: "GET",
+      url: "https://fbrapi.com/teams?team_id={id}",
+      headers: [
+        "X-API-KEY":api_key,
+        "Accept":"application/json",
+      ],
+    })
+    match res {
+      resp => {
+        match resp.is_ok() {
+          true => {
+            match resp.json<TeamResp>() {
+              ok(team) => {
+                let snap = calculate(team.team_schedule.data)
+                match json::encode(snap) {
+                  ok(str) => {
+                    fs::create_file("./db/{id}.json")
+                    if not fs::write("./db/{id}.json", str) {
+                      io::print("failed to save for {name}")
+                    }
+                  },
+                  err => io::print("couldn't encode for {name}")
+                }
+              },
+              err => io::print("unable to parse response body: {err}")
+            }
+          },
+          false => io::print("received a {resp.status}")
+        }
+      },
+      _ => io::print("Error fetching for {name}")
+    }
+  }
+}
+
+main()
