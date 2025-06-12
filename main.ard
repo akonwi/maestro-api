@@ -40,7 +40,6 @@ struct Snapshot {
 	cleanSheetRatio: Float,
 	dirtySheetRatio: Float,
 	twoGoalsConcededRatio: Float,
-	xTwoAgainst: Float,
 	cleanSheets: CleanSheetCounts,
 	oneGoalConceded: GoalConcededCounts,
 	twoPlusGoalsConceded: GoalConcededCounts,
@@ -69,7 +68,6 @@ fn calculate(name: Str,matches: [Match]) Snapshot {
     cleanSheetRatio: 0.0,
     dirtySheetRatio: 0.0,
     twoGoalsConcededRatio: 0.0,
-    xTwoAgainst: 0.0,
     cleanSheets: cleanSheets,
     oneGoalConceded: oneGoalConceded,
     twoPlusGoalsConceded: twoPlusGoalsConceded,
@@ -127,39 +125,31 @@ fn calculate(name: Str,matches: [Match]) Snapshot {
 fn main() {
   for name, id in teams {
     io::print("Calculating for {name}")
-    let res = http::send(http::Request{
+    let resp = http::send(http::Request{
       method: "GET",
       url: "https://fbrapi.com/teams?team_id={id}",
       headers: [
         "X-API-KEY":api_key,
         "Accept":"application/json",
       ],
-    })
-    match res {
-      resp => {
-        match resp.is_ok() {
-          true => {
-            match resp.json<TeamResp>() {
-              ok(team) => {
-                let snap = calculate(name, team.team_schedule.data)
-                match json::encode(snap) {
-                  ok(str) => {
-                    fs::create_file("./snaps/{id}.json")
-                    match fs::write("./snaps/{id}.json", str) {
-                      ok => {},
-                      err => io::print("failed to save for {name}: {err}")
-                    }
-                  },
-                  err => io::print("couldn't encode for {name}")
-                }
-              },
-              err => io::print("unable to parse response body: {err}")
+    }).expect("Error fetching for {name}")
+
+    match resp.is_ok() {
+      true => {
+        let team = resp.json<TeamResp>().expect("Unable to parse response body")
+        let snap = calculate(name, team.team_schedule.data)
+        match json::encode(snap) {
+          ok(str) => {
+            fs::create_file("./snaps/{id}.json")
+            match fs::write("./snaps/{id}.json", str) {
+              ok => {},
+              err => io::print("failed to save for {name}: {err}")
             }
           },
-          false => io::print("received a {resp.status}")
+          err => io::print("couldn't encode for {name}")
         }
       },
-      _ => io::print("Error fetching for {name}")
+      false => io::print("received a {resp.status}")
     }
   }
 }
