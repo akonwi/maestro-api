@@ -145,8 +145,9 @@ fn main() {
                 match json::encode(snap) {
                   ok(str) => {
                     fs::create_file("./snaps/{id}.json")
-                    if not fs::write("./snaps/{id}.json", str) {
-                      io::print("failed to save for {name}")
+                    match fs::write("./snaps/{id}.json", str) {
+                      ok => {},
+                      err => io::print("failed to save for {name}: {err}")
                     }
                   },
                   err => io::print("couldn't encode for {name}")
