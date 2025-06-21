@@ -259,6 +259,7 @@ server.tool(
 
 		let goalScored = 0;
 		let goalConceded = 0;
+		let cleanSheets = 0;
 
 		for (const fixture of fixturesResult.value.response) {
 			// Check if the team is playing at home or away
@@ -266,15 +267,22 @@ server.tool(
 				// Team is playing at home
 				goalScored += fixture.goals.home;
 				goalConceded += fixture.goals.away;
+				if (fixture.goals.home === 0) {
+					cleanSheets++;
+				}
 			} else if (fixture.teams.away.id === team) {
 				// Team is playing away
 				goalScored += fixture.goals.away;
 				goalConceded += fixture.goals.home;
+				if (fixture.goals.away === 0) {
+					cleanSheets++;
+				}
 			}
 		}
 
 		const averageGoalsScored = goalScored / fixturesResult.value.results;
 		const averageGoalsConceded = goalConceded / fixturesResult.value.results;
+		const percentageCleanSheets = cleanSheets / fixturesResult.value.results;
 
 		return {
 			content: [
@@ -286,35 +294,14 @@ server.tool(
 						2,
 					)} and their average goals conceded per game is ${averageGoalsConceded.toFixed(
 						2,
-					)}.`,
+					)}. Their percentage of clean sheets is ${percentageCleanSheets.toFixed(
+						2,
+					)}%.`,
 				},
 			],
 		};
 	},
 );
-
-// server.tool(
-// 	"get-leagues",
-// 	"Get a list of leagues",
-// 	{
-// 		id: z.string().optional().describe("id of the league"),
-// 		search: z.string().min(3).optional().describe("search term "),
-// 		current: z
-// 			.enum(["true", "false"])
-// 			.optional()
-// 			.describe("current state of the league"),
-// 	},
-// 	async (args) => {
-// 		const result = await makeRequest<{
-// 			response: { id: number; name: string }[];
-// 		}>("/leagues");
-// 		if (result.error) {
-// 			throw new Error(result.error);
-// 		}
-// 		// todo: return the list as json content
-// 		return { content: [] };
-// 	},
-// );
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
