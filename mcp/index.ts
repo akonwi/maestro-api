@@ -5,6 +5,7 @@ import { z } from "zod";
 // MLS (Major League Soccer) league id
 const LEAGUE_IDS: Record<string, number> = {
 	MLS: 253,
+	"Club World Cup": 15,
 } as const;
 
 export type OK<Data> = {
@@ -37,6 +38,12 @@ const headers = {
 	Accept: "application/json",
 };
 
+function sanitize(params: Record<string, any>) {
+	return Object.fromEntries(
+		Object.entries(params).filter(([_, value]) => value != undefined),
+	);
+}
+
 async function makeRequest<T>(
 	path: string,
 	params: Record<string, any>,
@@ -44,7 +51,7 @@ async function makeRequest<T>(
 	try {
 		const response = await fetch(
 			`https://v3.football.api-sports.io${path}?${new URLSearchParams(
-				params,
+				sanitize(params),
 			).toString()}`,
 			{
 				method: "GET",
@@ -94,9 +101,9 @@ type TeamsResponse = {
 
 server.tool(
 	"get-teams",
-	"Get a list of teams in a league",
+	"Get a list of teams in a league or competition",
 	{
-		league: z.enum(["MLS"]),
+		league: z.enum(["MLS", "Club World Cup"]),
 		season: z.number().describe("The season year (YYYY)"),
 	},
 	async ({ league, season }) => {
@@ -127,17 +134,23 @@ server.tool(
 );
 
 server.tool(
-	"get-team-fixtures",
-	"Get all fixtures for a team in a season",
+	"get-fixtures",
+	"Search for fixtures in a season. At least a league or team must be provided.",
 	{
-		team: z.number().describe("The team id"),
+		league: z.enum(["MLS", "Club World Cup"]).optional(),
+		team: z.number().describe("The team id").optional(),
 		season: z.number().describe("The season year (YYYY)"),
+		upcoming: z.boolean().optional(),
+		played: z.boolean().optional(),
 	},
-	async ({ team, season }) => {
-		const result = await makeRequest("/fixtures", {
-			team,
+	async ({ league, team, season, upcoming, played }) => {
+		const params: Record<string, any> = {
 			season,
-		});
+			league: league ? LEAGUE_IDS[league] : undefined,
+			team: team ? team : undefined,
+			status: upcoming ? "NS" : played ? "FT" : undefined,
+		};
+		const result = await makeRequest("/fixtures", params);
 		if (!result.ok) {
 			return {
 				content: [
@@ -297,6 +310,83 @@ server.tool(
 					)}. Their percentage of clean sheets is ${percentageCleanSheets.toFixed(
 						2,
 					)}%.`,
+				},
+			],
+		};
+	},
+);
+
+const predictionsDescription = `
+  Get predictions about a fixture.
+
+  The predictions are made using several algorithms including the poisson distribution, comparison of team statistics, last matches, players etc…
+
+  Bookmakers odds are not used to make these predictions
+
+  Also provides some comparative statistics between teams
+  Available Predictions
+
+  Match winner : Id of the team that can potentially win the fixture
+  Win or Draw : If True indicates that the designated team can win or draw
+  Under / Over : -1.5 / -2.5 / -3.5 / -4.5 / +1.5 / +2.5 / +3.5 / +4.5 *
+  Goals Home : -1.5 / -2.5 / -3.5 / -4.5 *
+  Goals Away -1.5 / -2.5 / -3.5 / -4.5 *
+  Advice (Ex : Deportivo Santani or draws and -3.5 goals)
+  * -1.5 means that there will be a maximum of 1.5 goals in the fixture, i.e : 1 goal
+  `;
+
+server.tool(
+	"get-predictions",
+	predictionsDescription,
+	{ fixture: z.string().describe("The id of the fixture") },
+	async ({ fixture }) => {
+		const result = await makeRequest("/predictions", { fixture });
+		if (!result.ok) {
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Failed to get predictions: ${result.error}`,
+					},
+				],
+			};
+		}
+		return {
+			content: [
+				{
+					type: "text",
+					text: JSON.stringify(result.value),
+				},
+			],
+		};
+	},
+);
+
+server.tool(
+	"get-odds",
+	predictionsDescription,
+	{
+		league: z.string().describe("The id of the league"),
+		season: z.number().describe("The season year (YYYY)"),
+		fixture: z.string().describe("The id of the fixture"),
+	},
+	async ({ fixture }) => {
+		const result = await makeRequest("/odds", { fixture });
+		if (!result.ok) {
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Failed to get odds: ${result.error}`,
+					},
+				],
+			};
+		}
+		return {
+			content: [
+				{
+					type: "text",
+					text: JSON.stringify(result.value),
 				},
 			],
 		};
