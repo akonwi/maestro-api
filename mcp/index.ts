@@ -3,7 +3,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 // MLS (Major League Soccer) league id
-const MLS = 253;
+const LEAGUE_IDS: Record<string, number> = {
+	MLS: 253,
+} as const;
 
 export type OK<Data> = {
 	ok: true;
@@ -31,7 +33,7 @@ export function err<E>(error: E): NotOK<E> {
 export type Result<Data, Error = null> = OK<Data> | NotOK<Error>;
 
 const headers = {
-	Authorization: "91be9b12c36d01fd71847355d020c8d7",
+	"x-rapidapi-key": "91be9b12c36d01fd71847355d020c8d7",
 	Accept: "application/json",
 };
 
@@ -41,11 +43,13 @@ async function makeRequest<T>(
 ): Promise<Result<T, string>> {
 	try {
 		const response = await fetch(
-			new Request("https://v3.football.api-sports.io" + path, {
+			`https://v3.football.api-sports.io${path}?${new URLSearchParams(
+				params,
+			).toString()}`,
+			{
 				method: "GET",
 				headers,
-				body: new URLSearchParams(params),
-			}),
+			},
 		);
 		if (!response.ok) {
 			return err(`HTTP error! status: ${response.status}`);
@@ -92,12 +96,12 @@ server.tool(
 	"get-teams",
 	"Get a list of teams in a league",
 	{
-		leagueId: z.number().optional().describe("The league id"),
+		league: z.enum(["MLS"]),
 		season: z.number().describe("The season year (YYYY)"),
 	},
-	async ({ leagueId, season }) => {
+	async ({ league, season }) => {
 		const result = await makeRequest<TeamsResponse>("/teams", {
-			league: leagueId,
+			league: LEAGUE_IDS[league],
 			season,
 		});
 		if (!result.ok) {
@@ -112,10 +116,12 @@ server.tool(
 		}
 
 		return {
-			content: result.value.response.map((team) => ({
-				type: "text",
-				text: JSON.stringify(team),
-			})),
+			content: [
+				{
+					type: "text",
+					text: JSON.stringify(result.value),
+				},
+			],
 		};
 	},
 );
