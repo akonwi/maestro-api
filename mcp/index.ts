@@ -126,6 +126,173 @@ server.tool(
 	},
 );
 
+server.tool(
+	"get-team-fixtures",
+	"Get all fixtures for a team in a season",
+	{
+		team: z.number().describe("The team id"),
+		season: z.number().describe("The season year (YYYY)"),
+	},
+	async ({ team, season }) => {
+		const result = await makeRequest("/fixtures", {
+			team,
+			season,
+		});
+		if (!result.ok) {
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Failed to fetch fixtures: ${result.error}`,
+					},
+				],
+			};
+		}
+
+		return {
+			content: [
+				{
+					type: "text",
+					text: JSON.stringify(result.value),
+				},
+			],
+		};
+	},
+);
+
+type FixturesResponse = {
+	results: number;
+	response: [
+		{
+			fixture: {
+				id: number;
+				referee: string | null;
+				timezone: string;
+				date: string;
+				timestamp: number;
+				periods: {
+					first: number | null;
+					second: number | null;
+				};
+				venue: {
+					id: number;
+					name: string;
+					city: string;
+				};
+				status: {
+					long: string;
+					short: string;
+					elapsed: number;
+					extra: number | null;
+				};
+			};
+			league: {
+				id: number;
+				name: string;
+				country: string;
+				logo: string;
+				flag: string;
+				season: number;
+				round: string;
+			};
+			teams: {
+				home: {
+					id: number;
+					name: string;
+					logo: string;
+					winner: boolean;
+				};
+				away: {
+					id: number;
+					name: string;
+					logo: string;
+					winner: boolean;
+				};
+			};
+			goals: {
+				home: number;
+				away: number;
+			};
+			score: {
+				halftime: {
+					home: number;
+					away: number;
+				};
+				fulltime: {
+					home: number | null;
+					away: number | null;
+				};
+				extratime: {
+					home: number | null;
+					away: number | null;
+				};
+				penalty: {
+					home: number | null;
+					away: number | null;
+				};
+			};
+		},
+	];
+};
+server.tool(
+	"get-goal-stats",
+	"Get goal statistics for a team in a season. Includes total goals scored and conceded and averages per game.",
+	{
+		team: z.number().describe("The team id"),
+		season: z.number().describe("The season year (YYYY)"),
+	},
+	async ({ team, season }) => {
+		const fixturesResult = await makeRequest<FixturesResponse>("/fixtures", {
+			team,
+			season,
+		});
+		if (!fixturesResult.ok) {
+			return {
+				content: [
+					{
+						type: "text",
+						text: `Failed to fetch fixtures: ${fixturesResult.error}`,
+					},
+				],
+			};
+		}
+
+		let goalScored = 0;
+		let goalConceded = 0;
+
+		for (const fixture of fixturesResult.value.response) {
+			// Check if the team is playing at home or away
+			if (fixture.teams.home.id === team) {
+				// Team is playing at home
+				goalScored += fixture.goals.home;
+				goalConceded += fixture.goals.away;
+			} else if (fixture.teams.away.id === team) {
+				// Team is playing away
+				goalScored += fixture.goals.away;
+				goalConceded += fixture.goals.home;
+			}
+		}
+
+		const averageGoalsScored = goalScored / fixturesResult.value.results;
+		const averageGoalsConceded = goalConceded / fixturesResult.value.results;
+
+		return {
+			content: [
+				{
+					type: "text",
+					text: `The team has scored ${goalScored} goals and conceded ${goalConceded} goals in ${
+						fixturesResult.value.results
+					} games. Their average goals scored per game is ${averageGoalsScored.toFixed(
+						2,
+					)} and their average goals conceded per game is ${averageGoalsConceded.toFixed(
+						2,
+					)}.`,
+				},
+			],
+		};
+	},
+);
+
 // server.tool(
 // 	"get-leagues",
 // 	"Get a list of leagues",
