@@ -90,7 +90,7 @@ fn get_teams(db: sqlite::Database) {
     for team in fetch_teams(league.id, 2025) {
       match db.insert("teams", team) {
         err => io::print("Failed to insert team"),
-        _ => io::print("Saved {team.name}")
+        ok(_) => io::print("Saved {team.name}")
       }
     }
   }
@@ -99,20 +99,9 @@ fn get_teams(db: sqlite::Database) {
 fn main() {
   let db = sqlite::open("./db.sqlite").expect("Failed to open database")
 
-  match db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)") {
-    err => panic("Failed to create leagues table: {err}"),
-    _ => {}
-  }
-
-  match db.exec("create table if not exists seasons (id INTEGER PRIMARY KEY, name TEXT, code TEXT)") {
-    err => panic("Failed to create leagues table: {err}"),
-    _ => {}
-  }
-
-  match db.exec("create table if not exists teams (id INTEGER PRIMARY KEY, name TEXT, code TEXT, league_id INTEGER)") {
-    err => panic("Failed to create teams table: {err}"),
-    _ => {}
-  }
+  db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)").expect("Failed to create leagues table")
+  db.exec("create table if not exists seasons (id INTEGER PRIMARY KEY, name TEXT, code TEXT)").expect("Failed to create seasons table")
+  db.exec("create table if not exists teams (id INTEGER PRIMARY KEY, name TEXT, code TEXT, league_id INTEGER)").expect("Failed to create teams table")
 
   // get_teams(db)
 
