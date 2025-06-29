@@ -1,0 +1,77 @@
+use ard/http
+use ard/io
+use ard/maybe
+
+struct TeamEntryTeam {
+	id: Int,
+	name: Str,
+	code: Str?,
+}
+
+struct TeamEntry {
+  team: TeamEntryTeam
+}
+
+struct TeamsResponse {
+  errors: [Str],
+  results: Int,
+  response: [TeamEntry],
+}
+
+struct Team {
+  id: Int,
+	name: Str,
+	code: Str?,
+	league_id: Int,
+}
+
+fn parse_teams(res: http::Response) [TeamEntryTeam] {
+  mut result: [TeamEntryTeam] = []
+
+  match res.json<TeamsResponse>() {
+    err => {
+      io::print("Unable to parse teams response: {err}")
+    },
+    ok(response) => {
+      io::print("Received {response.results} results")
+      for entry in response.response {
+        result.push(entry.team)
+      }
+    },
+  }
+
+  result
+}
+
+pub fn fetch(league_id: Int, season: Int) [Team] {
+  mut result: [Team] = []
+
+  let req = http::Request{
+    method: "GET",
+    url: "https://v3.football.api-sports.io/teams?league={league_id}&season={season}",
+    headers: [
+      "x-rapidapi-key": "91be9b12c36d01fd71847355d020c8d7",
+      "Accept": "application/json",
+    ],
+    body: maybe::none(),
+  }
+
+  match http::send(req) {
+    err => {
+      io::print("Error fetching teams: {err}")
+    },
+    ok(res) => {
+      let entries = parse_teams(res)
+      for entry in entries {
+        result.push(Team{
+          id: entry.id,
+          name: entry.name,
+          code: entry.code,
+          league_id: league_id,
+        })
+      }
+    },
+  }
+
+  result
+}

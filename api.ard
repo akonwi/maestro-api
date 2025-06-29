@@ -3,79 +3,7 @@ use ard/io
 use ard/sqlite
 use ard/maybe
 
-struct TeamEntryTeam {
-	id: Int,
-	name: Str,
-	code: Str?,
-}
-
-struct TeamEntry {
-  team: TeamEntryTeam
-}
-
-struct TeamsResponse {
-  errors: [Str],
-  results: Int,
-  response: [TeamEntry],
-}
-
-struct Team {
-  id: Int,
-	name: Str,
-	code: Str?,
-	league_id: Int,
-}
-
-fn parse_teams(res: http::Response) [TeamEntryTeam] {
-  mut result: [TeamEntryTeam] = []
-
-  match res.json<TeamsResponse>() {
-    err => {
-      io::print("Unable to parse teams response: {err}")
-    },
-    ok(response) => {
-      io::print("Received {response.results} results")
-      for entry in response.response {
-        result.push(entry.team)
-      }
-    },
-  }
-
-  result
-}
-
-fn fetch_teams(league_id: Int, season: Int) [Team] {
-  mut result: [Team] = []
-
-  let req = http::Request{
-    method: "GET",
-    url: "https://v3.football.api-sports.io/teams?league={league_id}&season={season}",
-    headers: [
-      "x-rapidapi-key": "91be9b12c36d01fd71847355d020c8d7",
-      "Accept": "application/json",
-    ],
-    body: maybe::none(),
-  }
-
-  match http::send(req) {
-    err => {
-      io::print("Error fetching teams: {err}")
-    },
-    ok(res) => {
-      let entries = parse_teams(res)
-      for entry in entries {
-        result.push(Team{
-          id: entry.id,
-          name: entry.name,
-          code: entry.code,
-          league_id: league_id,
-        })
-      }
-    },
-  }
-
-  result
-}
+use maestro/teams
 
 struct League {
   id: Int,
@@ -87,9 +15,9 @@ fn get_teams(db: sqlite::Database) {
   let leagues = db.get<League>("leagues", "").expect("Failed to get leagues")
   for league in leagues {
     io::print("Fetching teams for {league.name}")
-    for team in fetch_teams(league.id, 2025) {
+    for team in teams::fetch(league.id, 2025) {
       match db.insert("teams", team) {
-        err => io::print("Failed to insert team"),
+        err => io::print("Failed to insert {team.name}"),
         ok(_) => io::print("Saved {team.name}")
       }
     }
@@ -103,7 +31,7 @@ fn main() {
   db.exec("create table if not exists seasons (id INTEGER PRIMARY KEY, name TEXT, code TEXT)").expect("Failed to create seasons table")
   db.exec("create table if not exists teams (id INTEGER PRIMARY KEY, name TEXT, code TEXT, league_id INTEGER)").expect("Failed to create teams table")
 
-  // get_teams(db)
+  get_teams(db)
 
   db.close().expect("Failed to close database")
 }
