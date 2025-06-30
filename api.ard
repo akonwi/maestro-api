@@ -27,11 +27,14 @@ fn get_teams(db: sqlite::Database) {
 fn main() {
   let db = sqlite::open("./db.sqlite").expect("Failed to open database")
 
-  db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)").expect("Failed to create leagues table")
-  db.exec("create table if not exists seasons (id INTEGER PRIMARY KEY, name TEXT, code TEXT)").expect("Failed to create seasons table")
-  db.exec("create table if not exists teams (id INTEGER PRIMARY KEY, name TEXT, code TEXT, league_id INTEGER)").expect("Failed to create teams table")
+  db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
+    .expect("Failed to create leagues table")
+  db.exec("create table if not exists seasons (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
+    .expect("Failed to create seasons table")
+  db.exec("create table if not exists teams (id INTEGER PRIMARY KEY, name TEXT, code TEXT, league_id INTEGER)")
+    .expect("Failed to create teams table")
 
-  get_teams(db)
+  // get_teams(db)
 
   db.close().expect("Failed to close database")
 }
