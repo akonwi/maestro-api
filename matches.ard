@@ -65,7 +65,8 @@ fn fetch(league_id: Int, season: Int) [Match] {
 
   let req = http::Request{
     method: "GET",
-    url: "https://v3.football.api-sports.io/fixtures?league={league_id}&season=2025&status=FT",
+    // currently limiting to completed fixtures
+    url: "https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&status=FT",
     headers: [
       "x-rapidapi-key": "91be9b12c36d01fd71847355d020c8d7",
       "Accept": "application/json",
@@ -103,6 +104,8 @@ fn fetch(league_id: Int, season: Int) [Match] {
   result
 }
 
+// seed the db with completed matches in 2025
+// todo: accept season parameter
 fn seed(db: sqlite::Database, league_ids: [Int]) {
   db.exec(
     "CREATE TABLE IF NOT EXISTS matches (
