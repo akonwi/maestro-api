@@ -16,9 +16,14 @@ fn get_teams(db: sqlite::Database) {
   for league in leagues {
     io::print("Fetching teams for {league.name}")
     for team in teams::fetch(league.id, 2025) {
-      match db.insert("teams", team) {
-        err => io::print("Failed to insert {team.name}"),
-        ok(_) => io::print("Saved {team.name}")
+      match db.exists("teams", "id = {team.id}").or(false) {
+        true => {},
+        false => {
+          match db.insert("teams", team) {
+            err => io::print("Failed to insert {team.name}"),
+            ok(_) => io::print("Saved {team.name}")
+          }
+        }
       }
     }
   }
@@ -34,7 +39,7 @@ fn main() {
   db.exec("create table if not exists teams (id INTEGER PRIMARY KEY, name TEXT, code TEXT, league_id INTEGER)")
     .expect("Failed to create teams table")
 
-  // get_teams(db)
+  get_teams(db)
 
   db.close().expect("Failed to close database")
 }

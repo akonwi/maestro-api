@@ -25,7 +25,7 @@ struct Team {
 	league_id: Int,
 }
 
-fn parse_teams(res: http::Response) [TeamEntryTeam] {
+private fn parse_teams(res: http::Response) [TeamEntryTeam] {
   mut result: [TeamEntryTeam] = []
 
   match res.json<TeamsResponse>() {
@@ -43,7 +43,7 @@ fn parse_teams(res: http::Response) [TeamEntryTeam] {
   result
 }
 
-pub fn fetch(league_id: Int, season: Int) [Team] {
+fn fetch(league_id: Int, season: Int) [Team] {
   mut result: [Team] = []
 
   let req = http::Request{
