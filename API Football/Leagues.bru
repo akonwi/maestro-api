@@ -1,0 +1,16 @@
+meta {
+  name: Leagues
+  type: http
+  seq: 3
+}
+
+get {
+  url: https://v3.football.api-sports.io/leagues?code=GB-ENG&type=league
+  body: none
+  auth: inherit
+}
+
+params:query {
+  code: GB-ENG
+  type: league
+}
