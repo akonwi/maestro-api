@@ -4,6 +4,7 @@ use ard/sqlite
 use ard/maybe
 
 use maestro/teams
+use maestro/matches
 
 struct League {
   id: Int,
@@ -11,8 +12,7 @@ struct League {
   code: Str,
 }
 
-fn get_teams(db: sqlite::Database) {
-  let leagues = db.get<League>("leagues", "").expect("Failed to get leagues")
+fn get_teams(db: sqlite::Database, leagues: [League]) {
   for league in leagues {
     io::print("Fetching teams for {league.name}")
     for team in teams::fetch(league.id, 2025) {
@@ -39,7 +39,14 @@ fn main() {
   db.exec("create table if not exists teams (id INTEGER PRIMARY KEY, name TEXT, code TEXT, league_id INTEGER)")
     .expect("Failed to create teams table")
 
-  get_teams(db)
+  let leagues = db.get<League>("leagues", "").expect("Failed to get leagues")
+  get_teams(db, leagues)
+
+  mut league_ids: [Int] = []
+  for league in leagues {
+    league_ids.push(league.id)
+  }
+  matches::seed(db, league_ids)
 
   db.close().expect("Failed to close database")
 }

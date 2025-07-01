@@ -1,0 +1,129 @@
+use ard/http
+use ard/io
+use ard/maybe
+use ard/sqlite
+
+struct FixtureEntryFixture {
+  id: Int,
+  date: Str,
+  timestamp: Int,
+}
+
+struct FixtureEntryGoals {
+  home: Int,
+  away: Int,
+}
+
+struct FixtureTeam {
+  id: Int,
+  name: Str,
+}
+
+struct FixtureEntryTeams {
+  home: FixtureTeam,
+  away: FixtureTeam,
+}
+
+struct FixtureEntry {
+  fixture: FixtureEntryFixture,
+  goals: FixtureEntryGoals,
+  teams: FixtureEntryTeams,
+}
+
+struct FixturesResponse {
+  // errors: [Str],
+  results: Int,
+  response: [FixtureEntry],
+}
+
+struct Match {
+  id: Int,
+  date: Str,
+  timestamp: Int,
+  league_id: Int,
+  home_team_id: Int,
+  away_team_id: Int,
+  home_goals: Int,
+  away_goals: Int,
+  winner_id: Int?,
+}
+
+private fn parse_fixtures(response: http::Response) [FixtureEntry] {
+  // List::new<FixtureEntry>()
+  mut entries: [FixtureEntry] = []
+
+  match response.json<FixturesResponse>() {
+    err => io::print("Error parsing fixtures: {err}"),
+    ok(res) => { entries = res.response }
+  }
+
+  entries
+}
+
+fn fetch(league_id: Int, season: Int) [Match] {
+  mut result: [Match] = []
+
+  let req = http::Request{
+    method: "GET",
+    url: "https://v3.football.api-sports.io/fixtures?league={league_id}&season=2025&status=FT",
+    headers: [
+      "x-rapidapi-key": "91be9b12c36d01fd71847355d020c8d7",
+      "Accept": "application/json",
+    ],
+    body: maybe::none(),
+  }
+
+  match http::send(req) {
+    err => io::print("Error fetching fixtures: {err}"),
+    ok(res) => {
+      let entries = parse_fixtures(res)
+      for entry in entries {
+        mut winner_id: Int? = maybe::none()
+        if entry.goals.home > entry.goals.away {
+          winner_id = maybe::some(entry.teams.home.id)
+        } else if entry.goals.home < entry.goals.away {
+          winner_id = maybe::some(entry.teams.away.id)
+        }
+
+        result.push(Match{
+          id: entry.fixture.id,
+          date: entry.fixture.date,
+          timestamp: entry.fixture.timestamp,
+          league_id: league_id,
+          home_team_id: entry.teams.home.id,
+          away_team_id: entry.teams.away.id,
+          home_goals: entry.goals.home,
+          away_goals: entry.goals.away,
+          winner_id: winner_id,
+        })
+      }
+    },
+  }
+
+  result
+}
+
+fn seed(db: sqlite::Database, league_ids: [Int]) {
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS matches (
+      id INTEGER PRIMARY KEY,
+      date TEXT NOT NULL,
+      timestamp INTEGER NOT NULL,
+      league_id INTEGER NOT NULL,
+      home_team_id INTEGER NOT NULL,
+      away_team_id INTEGER NOT NULL,
+      home_goals INTEGER NOT NULL,
+      away_goals INTEGER NOT NULL,
+      winner_id INTEGER
+    )"
+  ).expect("Failed to create matches table")
+
+  for id in league_ids {
+    for m in fetch(id, 2025) {
+      match db.insert("matches", m) {
+        err => io::print("Error inserting match({m.id}): {err}"),
+        ok(_) => io::print("Saved match {m.id}"),
+      }
+    }
+  }
+}
