@@ -26,21 +26,20 @@ struct Team {
 }
 
 private fn parse_teams(res: http::Response) [TeamEntryTeam] {
-  mut result: [TeamEntryTeam] = []
-
   match res.json<TeamsResponse>() {
     err => {
       io::print("Unable to parse teams response: {err}")
+      List::new<TeamEntryTeam>()
     },
     ok(response) => {
       io::print("Received {response.results} results")
+      mut teams = List::new<TeamEntryTeam>()
       for entry in response.response {
-        result.push(entry.team)
+        teams.push(entry.team)
       }
+      teams
     },
   }
-
-  result
 }
 
 fn fetch(league_id: Int, season: Int) [Team] {

@@ -48,24 +48,12 @@ struct Match {
   winner_id: Int?,
 }
 
-private fn parse_fixtures(response: http::Response) [FixtureEntry] {
-  // List::new<FixtureEntry>()
-  mut entries: [FixtureEntry] = []
-
-  match response.json<FixturesResponse>() {
-    err => io::print("Error parsing fixtures: {err}"),
-    ok(res) => { entries = res.response }
-  }
-
-  entries
-}
-
+// currently limiting to completed fixtures
 fn fetch(league_id: Int, season: Int) [Match] {
   mut result: [Match] = []
 
   let req = http::Request{
     method: "GET",
-    // currently limiting to completed fixtures
     url: "https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&status=FT",
     headers: [
       "x-rapidapi-key": "91be9b12c36d01fd71847355d020c8d7",
@@ -77,7 +65,14 @@ fn fetch(league_id: Int, season: Int) [Match] {
   match http::send(req) {
     err => io::print("Error fetching fixtures: {err}"),
     ok(res) => {
-      let entries = parse_fixtures(res)
+      let entries = match res.json<FixturesResponse>() {
+        err => {
+          io::print("Error parsing fixtures: {err}")
+          List::new<FixtureEntry>()
+        },
+        ok(data) => data.response
+      }
+
       for entry in entries {
         mut winner_id: Int? = maybe::none()
         if entry.goals.home > entry.goals.away {
