@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"os"
 
@@ -13,25 +12,41 @@ import (
 var docStyle = lipgloss.NewStyle().Margin(1, 2)
 
 type Team struct {
-	id   int8
+	id   int
 	name string
 }
 
 type League struct {
-	id   int8
+	id   int
 	name string
+	code string
 }
 
+func (l League) isNil() bool {
+	return l == League{}
+}
+
+// Implement list.Item interface for League
+func (l League) FilterValue() string { return l.code }
+func (l League) Title() string       { return l.code }
+func (l League) Description() string { return l.name }
+
 type State struct {
-	db      *sql.DB
 	err     error
 	leagues list.Model
+	league  League
 }
 
 func newState() *State {
 	state := &State{}
-	state.leagues = list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
+	listDelegate := list.NewDefaultDelegate()
+	blue1 := lipgloss.Color("38")
+	blue2 := lipgloss.Color("32")
+	listDelegate.Styles.SelectedTitle = listDelegate.Styles.SelectedTitle.Foreground(blue1).BorderLeftForeground(blue1)
+	listDelegate.Styles.SelectedDesc = listDelegate.Styles.SelectedDesc.Foreground(blue2).BorderLeftForeground(blue1)
+	state.leagues = list.New([]list.Item{}, listDelegate, 0, 0)
 	state.leagues.Title = "Leagues"
+	// state.leagues.SetShowHelp(false)
 	return state
 }
 
@@ -44,8 +59,17 @@ func (s *State) Init() tea.Cmd {
 func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
-			return s, tea.Quit
+		{
+			switch keypress := msg.String(); keypress {
+			case "ctrl+c":
+				return s, tea.Quit
+			case "enter":
+				l, ok := s.leagues.SelectedItem().(League)
+				if ok {
+					s.league = l
+				}
+				return s, nil
+			}
 		}
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
@@ -54,7 +78,13 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.err = msg
 		return s, tea.Quit
 	case DBConnected:
-		s.db = msg
+		return s, getLeagues
+	case LeaguesLoaded:
+		items := make([]list.Item, len(msg))
+		for i, league := range msg {
+			items[i] = league
+		}
+		return s, s.leagues.SetItems(items)
 	}
 
 	var cmd tea.Cmd
@@ -65,10 +95,14 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View implements tea.Model.
 func (s *State) View() string {
 	if s.err != nil {
-		return docStyle.Render(s.err.Error())
+		return fmt.Sprintf("\nError: %v\n\n", s.err)
 	}
 
-	return docStyle.Render(s.leagues.View())
+	if s.league.isNil() {
+		return docStyle.Render(s.leagues.View())
+	}
+
+	return docStyle.Render(fmt.Sprintf("you chose %s", s.league.name))
 }
 
 func main() {
