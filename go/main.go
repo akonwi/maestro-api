@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -109,10 +110,16 @@ type State struct {
 	matches        list.Model
 	selectedLeague League
 	currentView    ViewState
+	spinner        spinner.Model
+	loading        bool
 }
 
 func newState() *State {
 	state := &State{}
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	state.spinner = sp
+
 	listDelegate := list.NewDefaultDelegate()
 	blue1 := lipgloss.Color("38")
 	blue2 := lipgloss.Color("32")
@@ -145,6 +152,14 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return s, nil
 	case tea.KeyMsg:
 		{
+			// var currentList list.Model
+			// switch s.currentView {
+			// case ViewLeagues:
+			// 	currentList = s.leagues
+			// case ViewMatches:
+			// 	currentList = s.matches
+			// }
+
 			switch keypress := msg.String(); keypress {
 			case "ctrl+c":
 				return s, tea.Quit
@@ -159,9 +174,18 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if ok {
 						s.selectedLeague = l
 						s.currentView = ViewMatches
+						s.loading = true
 						return s, getMatches(l.id)
 					}
 				}
+				// if s.currentView == ViewMatches {
+				// 	m, ok := s.matches.SelectedItem().(Match)
+				// 	if ok {
+				// 		s.selectedMatch = m
+				// 		return s, getHeadToHeadStats(m.id)
+				// 	}
+				// }
+
 				return s, nil
 			}
 		}
@@ -185,18 +209,21 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			items[i] = match
 		}
 		s.matches.SetItems(items)
+		s.loading = false
 		return s, nil
 	}
 
-	var cmd tea.Cmd
+	var listCmd tea.Cmd
+	var spinnerCmd tea.Cmd
 	switch s.currentView {
 	case ViewLeagues:
-		s.leagues, cmd = s.leagues.Update(msg)
+		s.leagues, listCmd = s.leagues.Update(msg)
 	case ViewMatches:
-		s.leagues, cmd = s.matches.Update(msg)
+		s.leagues, listCmd = s.matches.Update(msg)
 	}
+	s.spinner, spinnerCmd = s.spinner.Update(msg)
 
-	return s, cmd
+	return s, tea.Batch(listCmd, spinnerCmd)
 }
 
 // View implements tea.Model.
@@ -209,6 +236,9 @@ func (s *State) View() string {
 	case ViewLeagues:
 		return docStyle.Render(s.leagues.View())
 	case ViewMatches:
+		if s.loading {
+			return docStyle.Render(s.spinner.View() + " Loading Matches")
+		}
 		return docStyle.Render(s.matches.View())
 	default:
 		return docStyle.Render(s.leagues.View())
