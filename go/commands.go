@@ -70,7 +70,17 @@ func getMatches(leagueID int) tea.Cmd {
 		}
 
 		// Query matches for the given league
-		rows, err := db.Query("SELECT m.id, m.date, m.timestamp, m.league_id, m.status, m.home_team_id, m.away_team_id, m.home_goals, m.away_goals, m.winner_id, ht.name as home_team_name, at.name as away_team_name FROM matches m JOIN teams ht ON m.home_team_id = ht.id JOIN teams at ON m.away_team_id = at.id WHERE m.league_id = ?", leagueID)
+		rows, err := db.Query(
+			`SELECT
+				m.id, m.date, m.timestamp, m.league_id, m.status, m.home_team_id, m.away_team_id, m.home_goals, m.away_goals, m.winner_id,
+				ht.name as home_team_name,
+				at.name as away_team_name
+			FROM matches m
+			JOIN teams ht ON m.home_team_id = ht.id JOIN teams at ON m.away_team_id = at.id
+			WHERE m.status == 'NS'
+			AND m.league_id = ?`,
+			leagueID,
+		)
 		if err != nil {
 			return ErrMsg{err: err}
 		}
