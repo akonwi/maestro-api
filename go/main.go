@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -26,69 +25,30 @@ type League struct {
 }
 
 type Match struct {
-	id        int
-	date      string
-	homeTeam  Team
-	awayTeam  Team
-	homeGoals int8
-	awayGoals int8
-	status    string
+	id           int
+	date         string
+	timestamp    int
+	leagueId     int
+	status       string
+	homeTeamId   int
+	awayTeamId   int
+	homeTeamName string
+	awayTeamName string
+	homeGoals    int
+	awayGoals    int
+	winnerId     *int
 }
 
 // Implement list.Item interface for Match
-func (m Match) FilterValue() string { return m.homeTeam.name + " vs " + m.awayTeam.name }
-func (m Match) Title() string       { return m.homeTeam.name + " vs " + m.awayTeam.name }
+func (m Match) FilterValue() string { return m.homeTeamName + " vs " + m.awayTeamName }
+func (m Match) Title() string       { return m.homeTeamName + " vs " + m.awayTeamName }
 func (m Match) Description() string { return m.score() }
 
 func (m Match) score() string {
 	if m.status == "NS" {
 		return "TBD"
 	}
-	return fmt.Sprintf("%d - %d", m.homeGoals, m.awayGoals)
-}
-
-type FixtureTeam struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
-	Code string `json:"code"`
-}
-
-type FixtureTeams struct {
-	Home FixtureTeam `json:"home"`
-	Away FixtureTeam `json:"away"`
-}
-
-type FixtureGoals struct {
-	Home *int `json:"home"`
-	Away *int `json:"away"`
-}
-
-type FixtureStatus struct {
-	Short string `json:"short"`
-	Long  string `json:"long"`
-}
-
-type Fixture struct {
-	ID     int           `json:"id"`
-	Date   time.Time     `json:"date"`
-	Status FixtureStatus `json:"status"`
-}
-
-type FixtureEntry struct {
-	Fixture Fixture      `json:"fixture"`
-	Teams   FixtureTeams `json:"teams"`
-	Goals   FixtureGoals `json:"goals"`
-}
-
-type ApiError struct {
-	Field   string `json:"field"`
-	Message string `json:"message"`
-}
-
-type FixturesResponse struct {
-	Results  int            `json:"results"`
-	Response []FixtureEntry `json:"response"`
-	Errors   []ApiError     `json:"errors"`
+	return fmt.Sprintf("%d - %d (%s)", m.homeGoals, m.awayGoals, m.status)
 }
 
 // Implement list.Item interface for League
@@ -133,7 +93,7 @@ func newState() *State {
 	matchDelegate.Styles.SelectedTitle = matchDelegate.Styles.SelectedTitle.Foreground(blue1).BorderLeftForeground(blue1)
 	matchDelegate.Styles.SelectedDesc = matchDelegate.Styles.SelectedDesc.Foreground(blue2).BorderLeftForeground(blue1)
 	state.matches = list.New([]list.Item{}, matchDelegate, 0, 0)
-	state.matches.Title = "Today's Matches"
+	state.matches.Title = "Matches"
 
 	state.currentView = ViewLeagues
 	return state
@@ -174,7 +134,6 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if ok {
 						s.selectedLeague = l
 						s.currentView = ViewMatches
-						s.loading = true
 						return s, getMatches(l.id)
 					}
 				}

@@ -2,11 +2,7 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	_ "github.com/mattn/go-sqlite3"
@@ -67,80 +63,43 @@ func getLeagues() tea.Msg {
 
 type MatchesLoaded = []Match
 
-func toDateString(t time.Time) string {
-	y, m, d := t.Date()
-	return fmt.Sprintf("%d-%02d-%02d", y, m, d)
-}
-
 func getMatches(leagueID int) tea.Cmd {
 	return func() tea.Msg {
-		today := toDateString(time.Now())
-		url := fmt.Sprintf("https://v3.football.api-sports.io/fixtures?season=2025&league=%d&date=%s", leagueID, today)
+		if db == nil {
+			return ErrMsg{err: fmt.Errorf("database not connected")}
+		}
 
-		req, err := http.NewRequest("GET", url, nil)
+		// Query matches for the given league
+		rows, err := db.Query("SELECT m.id, m.date, m.timestamp, m.league_id, m.status, m.home_team_id, m.away_team_id, m.home_goals, m.away_goals, m.winner_id, ht.name as home_team_name, at.name as away_team_name FROM matches m JOIN teams ht ON m.home_team_id = ht.id JOIN teams at ON m.away_team_id = at.id WHERE m.league_id = ?", leagueID)
 		if err != nil {
 			return ErrMsg{err: err}
 		}
-
-		req.Header.Set("x-rapidapi-key", "91be9b12c36d01fd71847355d020c8d7")
-		req.Header.Set("Accept", "application/json")
-
-		client := &http.Client{Timeout: 10 * time.Second}
-		resp, err := client.Do(req)
-		if err != nil {
-			return ErrMsg{err: err}
-		}
-		defer resp.Body.Close()
-
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			return ErrMsg{err: wrapError(err, "unable to read response")}
-		}
-
-		var fixturesResp FixturesResponse
-		if err := json.Unmarshal(body, &fixturesResp); err != nil {
-			return ErrMsg{err: err}
-		}
-
-		// Check for API errors
-		if len(fixturesResp.Errors) > 0 {
-			var errorMsg string
-			for _, apiError := range fixturesResp.Errors {
-				if errorMsg != "" {
-					errorMsg += "; "
-				}
-				errorMsg += fmt.Sprintf("%s: %s", apiError.Field, apiError.Message)
-			}
-			return ErrMsg{err: fmt.Errorf("API error: %s", errorMsg)}
-		}
+		defer rows.Close()
 
 		var matches []Match
-		for _, entry := range fixturesResp.Response {
-			var homeGoals int8
-			var awayGoals int8
-			if entry.Goals.Home != nil {
-				homeGoals = int8(*entry.Goals.Home)
-			}
-			if entry.Goals.Away != nil {
-				awayGoals = int8(*entry.Goals.Away)
+		for rows.Next() {
+			var match Match
+			var winnerId sql.NullInt64
+			var homeTeamName, awayTeamName string
+			err := rows.Scan(&match.id, &match.date, &match.timestamp, &match.leagueId, &match.status, &match.homeTeamId, &match.awayTeamId, &match.homeGoals, &match.awayGoals, &winnerId, &homeTeamName, &awayTeamName)
+			if err != nil {
+				return ErrMsg{err: err}
 			}
 
-			match := &Match{
-				id:   entry.Fixture.ID,
-				date: toDateString(entry.Fixture.Date),
-				homeTeam: Team{
-					id:   entry.Teams.Home.ID,
-					name: entry.Teams.Home.Name,
-				},
-				awayTeam: Team{
-					id:   entry.Teams.Away.ID,
-					name: entry.Teams.Away.Name,
-				},
-				homeGoals: homeGoals,
-				awayGoals: awayGoals,
-				status:    entry.Fixture.Status.Short,
+			if winnerId.Valid {
+				winnerIdInt := int(winnerId.Int64)
+				match.winnerId = &winnerIdInt
 			}
-			matches = append(matches, *match)
+
+			// Assign team names to match struct
+			match.homeTeamName = homeTeamName
+			match.awayTeamName = awayTeamName
+
+			matches = append(matches, match)
+		}
+
+		if err = rows.Err(); err != nil {
+			return ErrMsg{err: err}
 		}
 
 		return MatchesLoaded(matches)
