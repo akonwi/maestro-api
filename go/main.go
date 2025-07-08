@@ -112,14 +112,6 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return s, nil
 	case tea.KeyMsg:
 		{
-			// var currentList list.Model
-			// switch s.currentView {
-			// case ViewLeagues:
-			// 	currentList = s.leagues
-			// case ViewMatches:
-			// 	currentList = s.matches
-			// }
-
 			switch keypress := msg.String(); keypress {
 			case "ctrl+c":
 				return s, tea.Quit
@@ -178,7 +170,7 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ViewLeagues:
 		s.leagues, listCmd = s.leagues.Update(msg)
 	case ViewMatches:
-		s.leagues, listCmd = s.matches.Update(msg)
+		s.matches, listCmd = s.matches.Update(msg)
 	}
 	s.spinner, spinnerCmd = s.spinner.Update(msg)
 
