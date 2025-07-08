@@ -52,9 +52,10 @@ fn main() {
 
   // update data in the background
   let syncWorker = async::start(fn() {
+    let db = sqlite::open("./db.sqlite").expect("Failed to open database")
     while {
-      // do stuff
-      async::sleep(duration::from_seconds(3))
+      matches::update_db(db, [253])
+      async::sleep(duration::from_hours(12))
     }
   })
   // block current fiber until syncWorker ends

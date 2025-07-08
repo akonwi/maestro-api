@@ -3,20 +3,26 @@ use ard/io
 use ard/maybe
 use ard/sqlite
 
+struct FixtureEntryFixtureStatus {
+  short: Str,
+}
+
 struct FixtureEntryFixture {
   id: Int,
   date: Str,
   timestamp: Int,
+  status: FixtureEntryFixtureStatus,
 }
 
 struct FixtureEntryGoals {
-  home: Int,
-  away: Int,
+  home: Int?,
+  away: Int?,
 }
 
 struct FixtureTeam {
   id: Int,
   name: Str,
+  winner: Bool?,
 }
 
 struct FixtureEntryTeams {
@@ -41,6 +47,7 @@ struct Match {
   date: Str,
   timestamp: Int,
   league_id: Int,
+  status: Str,
   home_team_id: Int,
   away_team_id: Int,
   home_goals: Int,
@@ -48,13 +55,10 @@ struct Match {
   winner_id: Int?,
 }
 
-// currently limiting to completed fixtures
 fn fetch(league_id: Int, season: Int) [Match] {
-  mut result: [Match] = []
-
   let req = http::Request{
     method: "GET",
-    url: "https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}&status=FT",
+    url: "https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}",
     headers: [
       "x-rapidapi-key": "91be9b12c36d01fd71847355d020c8d7",
       "Accept": "application/json",
@@ -63,7 +67,10 @@ fn fetch(league_id: Int, season: Int) [Match] {
   }
 
   match http::send(req) {
-    err => io::print("Error fetching fixtures: {err}"),
+    err => {
+      io::print("Error fetching fixtures: {err}")
+      List::new<Match>()
+    },
     ok(res) => {
       let entries = match res.json<FixturesResponse>() {
         err => {
@@ -73,11 +80,13 @@ fn fetch(league_id: Int, season: Int) [Match] {
         ok(data) => data.response
       }
 
+      mut result: [Match] = []
+
       for entry in entries {
         mut winner_id: Int? = maybe::none()
-        if entry.goals.home > entry.goals.away {
+        if entry.teams.home.winner.or(false) {
           winner_id = maybe::some(entry.teams.home.id)
-        } else if entry.goals.home < entry.goals.away {
+        } else if entry.teams.away.winner.or(false) {
           winner_id = maybe::some(entry.teams.away.id)
         }
 
@@ -86,28 +95,30 @@ fn fetch(league_id: Int, season: Int) [Match] {
           date: entry.fixture.date,
           timestamp: entry.fixture.timestamp,
           league_id: league_id,
+          status: entry.fixture.status.short,
           home_team_id: entry.teams.home.id,
           away_team_id: entry.teams.away.id,
-          home_goals: entry.goals.home,
-          away_goals: entry.goals.away,
+          home_goals: entry.goals.home.or(0),
+          away_goals: entry.goals.away.or(0),
           winner_id: winner_id,
         })
       }
-    },
-  }
 
-  result
+      result
+    }
+  }
 }
 
 // seed the db with completed matches in 2025
 // todo: accept season parameter
-fn seed(db: sqlite::Database, league_ids: [Int]) {
+fn update_db(db: sqlite::Database, league_ids: [Int]) {
   db.exec(
     "CREATE TABLE IF NOT EXISTS matches (
       id INTEGER PRIMARY KEY,
       date TEXT NOT NULL,
       timestamp INTEGER NOT NULL,
       league_id INTEGER NOT NULL,
+      status TEXT NOT NULL,
       home_team_id INTEGER NOT NULL,
       away_team_id INTEGER NOT NULL,
       home_goals INTEGER NOT NULL,
@@ -118,9 +129,17 @@ fn seed(db: sqlite::Database, league_ids: [Int]) {
 
   for id in league_ids {
     for m in fetch(id, 2025) {
-      match db.insert("matches", m) {
-        err => io::print("Error inserting match({m.id}): {err}"),
-        ok(_) => io::print("Saved match {m.id}"),
+      let exists = db.exists("matches", "id = {m.id}").expect("Error checking for match in db")
+      if (not exists) {
+        match db.insert("matches", m) {
+          err => io::print("Error inserting match({m.id}): {err}"),
+          ok(_) => io::print("Created match {m.id}"),
+        }
+      } else {
+        match db.update("matches", "id={m.id}", m) {
+          err => io::print("Error updating match({m.id}): {err}"),
+          ok(_) => io::print("Updated match {m.id}"),
+        }
       }
     }
   }
