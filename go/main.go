@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -64,18 +65,21 @@ const (
 )
 
 type State struct {
-	db             *sql.DB
-	err            error
-	leagues        list.Model
-	matches        list.Model
-	selectedLeague League
-	currentView    ViewState
-	spinner        spinner.Model
-	loading        bool
+	db                *sql.DB
+	err               error
+	leagues           list.Model
+	matches           list.Model
+	selectedLeague    League
+	currentView       ViewState
+	loading           bool
+	spinner           spinner.Model
+	showPlayedMatches bool
 }
 
 func newState() *State {
 	state := &State{}
+
+	// Initialize spinner
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	state.spinner = sp
@@ -95,8 +99,26 @@ func newState() *State {
 	state.matches = list.New([]list.Item{}, matchDelegate, 0, 0)
 	state.matches.Title = "Matches"
 
+	// Add help key binding for matches list
+	helpKey := key.NewBinding(
+		key.WithKeys("s"),
+		key.WithHelp("s", "toggle played/unplayed"),
+	)
+	state.matches.AdditionalFullHelpKeys = func() []key.Binding {
+		return []key.Binding{helpKey}
+	}
+
 	state.currentView = ViewLeagues
+	state.showPlayedMatches = false
 	return state
+}
+
+func (s *State) updateMatchesTitle() {
+	if s.showPlayedMatches {
+		s.matches.Title = "Played Matches"
+	} else {
+		s.matches.Title = "Upcoming Matches"
+	}
 }
 
 // Init implements tea.Model.
@@ -120,13 +142,23 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					s.currentView = ViewLeagues
 					return s, nil
 				}
+			case "s":
+				if s.currentView == ViewMatches {
+					s.showPlayedMatches = !s.showPlayedMatches
+					s.loading = true
+					s.updateMatchesTitle()
+					return s, getMatches(s.selectedLeague.id, s.showPlayedMatches)
+				}
 			case "enter":
 				if s.currentView == ViewLeagues {
 					l, ok := s.leagues.SelectedItem().(League)
 					if ok {
 						s.selectedLeague = l
 						s.currentView = ViewMatches
-						return s, getMatches(l.id)
+						s.loading = true
+						s.showPlayedMatches = false
+						s.updateMatchesTitle()
+						return s, getMatches(l.id, s.showPlayedMatches)
 					}
 				}
 				// if s.currentView == ViewMatches {

@@ -63,13 +63,20 @@ func getLeagues() tea.Msg {
 
 type MatchesLoaded = []Match
 
-func getMatches(leagueID int) tea.Cmd {
+func getMatches(leagueID int, showPlayedMatches bool) tea.Cmd {
 	return func() tea.Msg {
 		if db == nil {
 			return ErrMsg{err: fmt.Errorf("database not connected")}
 		}
 
 		// Query matches for the given league
+		var status string
+		if showPlayedMatches {
+			status = "FT"
+		} else {
+			status = "NS"
+		}
+
 		rows, err := db.Query(
 			`SELECT
 				m.id, m.date, m.timestamp, m.league_id, m.status, m.home_team_id, m.away_team_id, m.home_goals, m.away_goals, m.winner_id,
@@ -77,10 +84,10 @@ func getMatches(leagueID int) tea.Cmd {
 				at.name as away_team_name
 			FROM matches m
 			JOIN teams ht ON m.home_team_id = ht.id JOIN teams at ON m.away_team_id = at.id
-			WHERE m.status == 'NS'
+			WHERE m.status = ?
 			AND m.league_id = ?
 			ORDER BY m.timestamp ASC`,
-			leagueID,
+			status, leagueID,
 		)
 		if err != nil {
 			return ErrMsg{err: err}
