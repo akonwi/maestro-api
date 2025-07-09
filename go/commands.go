@@ -78,7 +78,8 @@ func getMatches(leagueID int) tea.Cmd {
 			FROM matches m
 			JOIN teams ht ON m.home_team_id = ht.id JOIN teams at ON m.away_team_id = at.id
 			WHERE m.status == 'NS'
-			AND m.league_id = ?`,
+			AND m.league_id = ?
+			ORDER BY m.timestamp ASC`,
 			leagueID,
 		)
 		if err != nil {
