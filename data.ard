@@ -54,6 +54,7 @@ fn main() {
   let syncWorker = async::start(fn() {
     let db = sqlite::open("./db.sqlite").expect("Failed to open database")
     while {
+      io::print("Updating match data")
       matches::update_db(db, [253])
       async::sleep(duration::from_hours(12))
     }

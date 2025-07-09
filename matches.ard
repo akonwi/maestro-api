@@ -133,12 +133,12 @@ fn update_db(db: sqlite::Database, league_ids: [Int]) {
       if (not exists) {
         match db.insert("matches", m) {
           err => io::print("Error inserting match({m.id}): {err}"),
-          ok(_) => io::print("Created match {m.id}"),
+          ok => {},
         }
       } else {
         match db.update("matches", "id={m.id}", m) {
           err => io::print("Error updating match({m.id}): {err}"),
-          ok(_) => io::print("Updated match {m.id}"),
+          ok => {},
         }
       }
     }
