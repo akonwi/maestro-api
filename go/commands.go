@@ -63,6 +63,8 @@ func getLeagues() tea.Msg {
 
 type MatchesLoaded = []Match
 
+type StatsLoaded = HeadToHeadStats
+
 func getMatches(leagueID int, showPlayedMatches bool) tea.Cmd {
 	return func() tea.Msg {
 		if db == nil {
@@ -121,5 +123,151 @@ func getMatches(leagueID int, showPlayedMatches bool) tea.Cmd {
 		}
 
 		return MatchesLoaded(matches)
+	}
+}
+
+func getHeadToHeadStats(homeTeamId, awayTeamId int, homeTeamName, awayTeamName string) tea.Cmd {
+	return func() tea.Msg {
+		if db == nil {
+			return ErrMsg{err: fmt.Errorf("database not connected")}
+		}
+
+		var stats HeadToHeadStats
+		stats.homeTeamName = homeTeamName
+		stats.awayTeamName = awayTeamName
+
+		// Query all finished matches for home team
+		homeRows, err := db.Query(`
+			SELECT home_team_id, away_team_id, home_goals, away_goals, winner_id
+			FROM matches
+			WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'FT'
+		`, homeTeamId, homeTeamId)
+		if err != nil {
+			return ErrMsg{err: err}
+		}
+		defer homeRows.Close()
+
+		// Process home team stats
+		for homeRows.Next() {
+			var homeId, awayId, homeGoals, awayGoals int
+			var winnerId sql.NullInt64
+			err := homeRows.Scan(&homeId, &awayId, &homeGoals, &awayGoals, &winnerId)
+			if err != nil {
+				return ErrMsg{err: err}
+			}
+
+			stats.homeGamesPlayed++
+
+			if homeId == homeTeamId {
+				// Home team is playing at home
+				stats.homeGoalsFor += homeGoals
+				stats.homeGoalsAgainst += awayGoals
+
+				if awayGoals == 0 {
+					stats.homeCleanSheets++
+				} else if awayGoals == 1 {
+					stats.home1GoalConceded++
+				} else if awayGoals >= 2 {
+					stats.home2PlusGoalsConceded++
+				}
+
+				if winnerId.Valid && int(winnerId.Int64) == homeTeamId {
+					stats.homeWins++
+				} else if winnerId.Valid && int(winnerId.Int64) == awayId {
+					// Home team lost
+				} else {
+					stats.draws++
+				}
+			} else {
+				// Home team is playing away
+				stats.homeGoalsFor += awayGoals
+				stats.homeGoalsAgainst += homeGoals
+
+				if homeGoals == 0 {
+					stats.homeCleanSheets++
+				} else if homeGoals == 1 {
+					stats.home1GoalConceded++
+				} else if homeGoals >= 2 {
+					stats.home2PlusGoalsConceded++
+				}
+
+				if winnerId.Valid && int(winnerId.Int64) == homeTeamId {
+					stats.homeWins++
+				} else if winnerId.Valid && int(winnerId.Int64) == homeId {
+					// Home team lost
+				} else {
+					stats.draws++
+				}
+			}
+		}
+
+		// Query all finished matches for away team
+		awayRows, err := db.Query(`
+			SELECT home_team_id, away_team_id, home_goals, away_goals, winner_id
+			FROM matches
+			WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'FT'
+		`, awayTeamId, awayTeamId)
+		if err != nil {
+			return ErrMsg{err: err}
+		}
+		defer awayRows.Close()
+
+		// Process away team stats
+		for awayRows.Next() {
+			var homeId, awayId, homeGoals, awayGoals int
+			var winnerId sql.NullInt64
+			err := awayRows.Scan(&homeId, &awayId, &homeGoals, &awayGoals, &winnerId)
+			if err != nil {
+				return ErrMsg{err: err}
+			}
+
+			stats.awayGamesPlayed++
+
+			if homeId == awayTeamId {
+				// Away team is playing at home
+				stats.awayGoalsFor += homeGoals
+				stats.awayGoalsAgainst += awayGoals
+
+				if awayGoals == 0 {
+					stats.awayCleanSheets++
+				} else if awayGoals == 1 {
+					stats.away1GoalConceded++
+				} else if awayGoals >= 2 {
+					stats.away2PlusGoalsConceded++
+				}
+
+				if winnerId.Valid && int(winnerId.Int64) == awayTeamId {
+					stats.awayWins++
+				}
+			} else {
+				// Away team is playing away
+				stats.awayGoalsFor += awayGoals
+				stats.awayGoalsAgainst += homeGoals
+
+				if homeGoals == 0 {
+					stats.awayCleanSheets++
+				} else if homeGoals == 1 {
+					stats.away1GoalConceded++
+				} else if homeGoals >= 2 {
+					stats.away2PlusGoalsConceded++
+				}
+
+				if winnerId.Valid && int(winnerId.Int64) == awayTeamId {
+					stats.awayWins++
+				}
+			}
+		}
+
+		// Calculate averages
+		if stats.homeGamesPlayed > 0 {
+			stats.homeAvgGoalsFor = float64(stats.homeGoalsFor) / float64(stats.homeGamesPlayed)
+			stats.homeAvgGoalsAgainst = float64(stats.homeGoalsAgainst) / float64(stats.homeGamesPlayed)
+		}
+		if stats.awayGamesPlayed > 0 {
+			stats.awayAvgGoalsFor = float64(stats.awayGoalsFor) / float64(stats.awayGamesPlayed)
+			stats.awayAvgGoalsAgainst = float64(stats.awayGoalsAgainst) / float64(stats.awayGamesPlayed)
+		}
+
+		return StatsLoaded(stats)
 	}
 }
