@@ -79,6 +79,13 @@ func getMatches(leagueID int, showPlayedMatches bool) tea.Cmd {
 			status = "NS"
 		}
 
+		var orderBy string
+		if showPlayedMatches {
+			orderBy = "ORDER BY m.timestamp DESC"
+		} else {
+			orderBy = "ORDER BY m.timestamp ASC"
+		}
+
 		rows, err := db.Query(
 			`SELECT
 				m.id, m.date, m.timestamp, m.league_id, m.status, m.home_team_id, m.away_team_id, m.home_goals, m.away_goals, m.winner_id,
@@ -88,7 +95,7 @@ func getMatches(leagueID int, showPlayedMatches bool) tea.Cmd {
 			JOIN teams ht ON m.home_team_id = ht.id JOIN teams at ON m.away_team_id = at.id
 			WHERE m.status = ?
 			AND m.league_id = ?
-			ORDER BY m.timestamp ASC`,
+			`+orderBy,
 			status, leagueID,
 		)
 		if err != nil {
