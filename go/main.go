@@ -157,6 +157,13 @@ func newState() *State {
 		key.WithKeys("v"),
 		key.WithHelp("v", "view bets"),
 	)
+
+	// Priority keys shown in main help view
+	state.matches.AdditionalShortHelpKeys = func() []key.Binding {
+		return []key.Binding{toggleKey, betKey, viewBetsKey}
+	}
+
+	// Additional keys shown in "more" help section
 	state.matches.AdditionalFullHelpKeys = func() []key.Binding {
 		return []key.Binding{toggleKey, betKey, viewBetsKey}
 	}
@@ -413,10 +420,6 @@ func (s *State) updateBetFormInputs(msg tea.Msg) {
 		s.betForm.oddsInput, cmd = s.betForm.oddsInput.Update(msg)
 	}
 	_ = cmd
-}
-
-func (s *State) submitBet() tea.Cmd {
-	return nil
 }
 
 func (s *State) renderSplitView() string {
