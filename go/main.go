@@ -409,8 +409,8 @@ func (s *State) renderSplitView() string {
 	rightColumnWidth := termWidth - matchesWidth
 
 	// Create side-by-side layout
-	matchesStyle := lipgloss.NewStyle().Width(matchesWidth).Padding(0, 1)
-	rightColumnStyle := lipgloss.NewStyle().Width(rightColumnWidth).Padding(0, 1)
+	matchesStyle := lipgloss.NewStyle().Width(matchesWidth)
+	rightColumnStyle := lipgloss.NewStyle().Width(rightColumnWidth)
 
 	return docStyle.Render(
 		lipgloss.JoinHorizontal(
