@@ -4,12 +4,10 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"strconv"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -93,22 +91,6 @@ type HeadToHeadStats struct {
 	awayGamesPlayed        int
 }
 
-type BetForm struct {
-	nameInput   textinput.Model
-	lineInput   textinput.Model
-	amountInput textinput.Model
-	oddsInput   textinput.Model
-	focused     int
-}
-
-type BetSaved struct {
-	bet Bet
-}
-
-type BetsLoaded struct {
-	bets []Bet
-}
-
 type State struct {
 	db                *sql.DB
 	err               error
@@ -175,33 +157,8 @@ func newState() *State {
 
 	state.currentView = ViewLeagues
 	state.showPlayedMatches = false
-	state.initBetForm()
+	state.betForm = newBetForm()
 	return state
-}
-
-func (s *State) initBetForm() {
-	s.betForm.nameInput = textinput.New()
-	s.betForm.nameInput.Placeholder = "Bet name (e.g., Over 2.5 goals)"
-	s.betForm.nameInput.Focus()
-	s.betForm.nameInput.CharLimit = 100
-	s.betForm.nameInput.Width = 40
-
-	s.betForm.lineInput = textinput.New()
-	s.betForm.lineInput.Placeholder = "Line (e.g., 2.5)"
-	s.betForm.lineInput.CharLimit = 10
-	s.betForm.lineInput.Width = 20
-
-	s.betForm.amountInput = textinput.New()
-	s.betForm.amountInput.Placeholder = "Amount (e.g., 100.00)"
-	s.betForm.amountInput.CharLimit = 10
-	s.betForm.amountInput.Width = 20
-
-	s.betForm.oddsInput = textinput.New()
-	s.betForm.oddsInput.Placeholder = "Odds (e.g., -110)"
-	s.betForm.oddsInput.CharLimit = 10
-	s.betForm.oddsInput.Width = 20
-
-	s.betForm.focused = 0
 }
 
 func (s *State) updateMatchesTitle() {
@@ -350,13 +307,14 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.loading = false
 		return s, nil
 	case BetsLoaded:
-		s.currentMatchBets = msg.bets
+		s.currentMatchBets = msg
 		s.loading = false
 		return s, nil
 	}
 
 	var listCmd tea.Cmd
 	var spinnerCmd tea.Cmd
+	var formCmd tea.Cmd
 	switch s.currentView {
 	case ViewLeagues:
 		s.leagues, listCmd = s.leagues.Update(msg)
@@ -364,7 +322,7 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.matches, listCmd = s.matches.Update(msg)
 	case ViewStats:
 		if s.showBetForm {
-			s.updateBetFormInputs(msg)
+			formCmd = s.updateBetFormInputs(msg)
 		}
 		s.matches, listCmd = s.matches.Update(msg)
 	case ViewBets:
@@ -372,7 +330,7 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	s.spinner, spinnerCmd = s.spinner.Update(msg)
 
-	return s, tea.Batch(listCmd, spinnerCmd)
+	return s, tea.Batch(listCmd, spinnerCmd, formCmd)
 }
 
 // View implements tea.Model.
@@ -416,8 +374,8 @@ func (s *State) resetBetForm() {
 func (s *State) updateBetFormFocus() {
 	s.betForm.nameInput.Blur()
 	s.betForm.lineInput.Blur()
-	s.betForm.amountInput.Blur()
 	s.betForm.oddsInput.Blur()
+	s.betForm.amountInput.Blur()
 
 	switch s.betForm.focused {
 	case 0:
@@ -425,25 +383,10 @@ func (s *State) updateBetFormFocus() {
 	case 1:
 		s.betForm.lineInput.Focus()
 	case 2:
-		s.betForm.amountInput.Focus()
-	case 3:
 		s.betForm.oddsInput.Focus()
-	}
-}
-
-func (s *State) updateBetFormInputs(msg tea.Msg) {
-	var cmd tea.Cmd
-	switch s.betForm.focused {
-	case 0:
-		s.betForm.nameInput, cmd = s.betForm.nameInput.Update(msg)
-	case 1:
-		s.betForm.lineInput, cmd = s.betForm.lineInput.Update(msg)
-	case 2:
-		s.betForm.amountInput, cmd = s.betForm.amountInput.Update(msg)
 	case 3:
-		s.betForm.oddsInput, cmd = s.betForm.oddsInput.Update(msg)
+		s.betForm.amountInput.Focus()
 	}
-	_ = cmd
 }
 
 func (s *State) renderSplitView() string {
@@ -533,33 +476,6 @@ func (s *State) renderSavedBets() string {
 	return lipgloss.JoinVertical(lipgloss.Left, betLines...)
 }
 
-func loadBets(matchID int) tea.Cmd {
-	return func() tea.Msg {
-		if db == nil {
-			return ErrMsg{err: fmt.Errorf("database not connected")}
-		}
-
-		rows, err := db.Query("SELECT id, name, line, amount, odds, result FROM bets WHERE match_id = ?", matchID)
-		if err != nil {
-			return ErrMsg{err: fmt.Errorf("failed to load bets: %v", err)}
-		}
-		defer rows.Close()
-
-		var bets []Bet
-		for rows.Next() {
-			var bet Bet
-			err := rows.Scan(&bet.id, &bet.name, &bet.line, &bet.amount, &bet.odds, &bet.result)
-			if err != nil {
-				continue
-			}
-			bet.matchID = matchID
-			bets = append(bets, bet)
-		}
-
-		return BetsLoaded{bets: bets}
-	}
-}
-
 func (s *State) renderStatsWithBetForm() string {
 	statsView := s.renderHeadToHeadStats()
 	betFormView := s.renderBetForm()
@@ -570,85 +486,6 @@ func (s *State) renderStatsWithBetForm() string {
 		"",
 		betFormView,
 	)
-}
-
-func (s *State) renderBetForm() string {
-	title := lipgloss.NewStyle().Bold(true).Render("Place Bet")
-
-	form := fmt.Sprintf(`%s
-
-Name: %s
-Line: %s
-Odds: %s
-Amount: %s
-
-Tab: Next field | Esc: Cancel | Enter: Save`,
-		title,
-		s.betForm.nameInput.View(),
-		s.betForm.lineInput.View(),
-		s.betForm.oddsInput.View(),
-		s.betForm.amountInput.View(),
-	)
-
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		Padding(1).
-		Render(form)
-}
-
-func (s *State) saveBet() tea.Cmd {
-	return func() tea.Msg {
-		if db == nil {
-			return ErrMsg{err: fmt.Errorf("database not connected")}
-		}
-
-		// Validate inputs
-		name := s.betForm.nameInput.Value()
-		lineStr := s.betForm.lineInput.Value()
-		amountStr := s.betForm.amountInput.Value()
-		oddsStr := s.betForm.oddsInput.Value()
-
-		if name == "" {
-			return ErrMsg{err: fmt.Errorf("bet name is required")}
-		}
-
-		if amountStr == "" {
-			return ErrMsg{err: fmt.Errorf("bet amount is required")}
-		}
-
-		var line float64
-		var amount float64
-		var odds int
-		var err error
-
-		if lineStr != "" {
-			line, err = strconv.ParseFloat(lineStr, 64)
-			if err != nil {
-				return ErrMsg{err: fmt.Errorf("invalid line value: %v", err)}
-			}
-		}
-
-		amount, err = strconv.ParseFloat(amountStr, 64)
-		if err != nil {
-			return ErrMsg{err: fmt.Errorf("invalid amount value: %v", err)}
-		}
-
-		if oddsStr != "" {
-			odds, err = strconv.Atoi(oddsStr)
-			if err != nil {
-				return ErrMsg{err: fmt.Errorf("invalid odds value: %v", err)}
-			}
-		}
-
-		// Insert bet into database
-		_, err = db.Exec("INSERT INTO bets (match_id, name, line, amount, odds, result) VALUES (?, ?, ?, ?, ?, ?)",
-			s.selectedMatch.id, name, line, amount, odds, Pending)
-		if err != nil {
-			return ErrMsg{err: fmt.Errorf("failed to save bet: %v", err)}
-		}
-
-		return BetSaved{bet: Bet{matchID: s.selectedMatch.id, name: name, line: line, amount: amount, odds: odds, result: Pending}}
-	}
 }
 
 func (s *State) renderHeadToHeadStats() string {
