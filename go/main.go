@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -135,28 +134,28 @@ func newState() *State {
 	state.currentMatchBets.Title = "Match Bets"
 
 	// Add help key bindings for matches list
-	toggleKey := key.NewBinding(
-		key.WithKeys("s"),
-		key.WithHelp("s", "toggle played/unplayed"),
-	)
-	betKey := key.NewBinding(
-		key.WithKeys("b"),
-		key.WithHelp("b", "place bet"),
-	)
-	viewBetsKey := key.NewBinding(
-		key.WithKeys("v"),
-		key.WithHelp("v", "view bets"),
-	)
+	// toggleKey := key.NewBinding(
+	// 	key.WithKeys("s"),
+	// 	key.WithHelp("s", "toggle played/unplayed"),
+	// )
+	// betKey := key.NewBinding(
+	// 	key.WithKeys("b"),
+	// 	key.WithHelp("b", "place bet"),
+	// )
+	// viewBetsKey := key.NewBinding(
+	// 	key.WithKeys("v"),
+	// 	key.WithHelp("v", "view bets"),
+	// )
 
-	// Priority keys shown in main help view
-	state.matches.AdditionalShortHelpKeys = func() []key.Binding {
-		return []key.Binding{toggleKey, betKey, viewBetsKey}
-	}
+	// // Priority keys shown in main help view
+	// state.matches.AdditionalShortHelpKeys = func() []key.Binding {
+	// 	return []key.Binding{toggleKey, betKey, viewBetsKey}
+	// }
 
-	// Additional keys shown in "more" help section
-	state.matches.AdditionalFullHelpKeys = func() []key.Binding {
-		return []key.Binding{toggleKey, betKey, viewBetsKey}
-	}
+	// // Additional keys shown in "more" help section
+	// state.matches.AdditionalFullHelpKeys = func() []key.Binding {
+	// 	return []key.Binding{toggleKey, betKey, viewBetsKey}
+	// }
 
 	state.currentView = ViewLeagues
 	state.showPlayedMatches = false
