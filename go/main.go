@@ -276,15 +276,19 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case tea.WindowSizeMsg:
-		h, v := docStyle.GetFrameSize()
-		s.leagues.SetSize(msg.Width-h, msg.Height-v)
+		w, h := docStyle.GetFrameSize()
+		s.leagues.SetSize(msg.Width-w, msg.Height-h)
 		if s.currentView == ViewStats {
 			// In stats view, matches list takes half the width
-			s.matches.SetSize((msg.Width-h)/2, msg.Height-v)
+			s.matches.SetSize((msg.Width-w)/2, msg.Height-h)
+			// Size bet list to 50% of right column height
+			rightColumnHeight := msg.Height - h
+			betListHeight := rightColumnHeight / 2
+			s.currentMatchBets.SetSize((msg.Width-w)/2, betListHeight)
 		} else {
-			s.matches.SetSize(msg.Width-h, msg.Height-v)
+			s.matches.SetSize(msg.Width-w, msg.Height-h)
+			s.currentMatchBets.SetSize((msg.Width-w)/2, (msg.Height-h)/2)
 		}
-		s.currentMatchBets.SetSize((msg.Width-h)/2, (msg.Height-v)/2)
 	case DBConnected:
 		s.db = msg
 		return s, getLeagues
@@ -421,6 +425,10 @@ func (s *State) renderSplitView() string {
 }
 
 func (s *State) renderRightColumn() string {
+	// Calculate 50% height for each section
+	rightColumnHeight := s.matches.Height()
+	sectionHeight := rightColumnHeight / 2
+
 	// Get the stats view
 	var statsView string
 	if s.showBetForm {
@@ -432,12 +440,15 @@ func (s *State) renderRightColumn() string {
 	// Get the bets view
 	betsView := s.renderSavedBets()
 
+	// Apply height constraints to make each section exactly 50%
+	statsStyle := lipgloss.NewStyle().Height(sectionHeight)
+	betsStyle := lipgloss.NewStyle().Height(sectionHeight)
+
 	// Create vertical split: stats on top, bets on bottom
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		statsView,
-		"",
-		betsView,
+		statsStyle.Render(statsView),
+		betsStyle.Render(betsView),
 	)
 }
 
