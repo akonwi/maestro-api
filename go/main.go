@@ -238,10 +238,10 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return s, nil
 				}
 			case "enter":
-				if s.showBetForm {
-					s.loading = true
-					return s, s.saveBet()
-				}
+				// if s.showBetForm {
+				// 	s.loading = true
+				// 	return s, s.saveBet()
+				// }
 				if s.currentView == ViewLeagues {
 					l, ok := s.leagues.SelectedItem().(League)
 					if ok {
@@ -259,7 +259,10 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						s.selectedMatch = m
 						s.currentView = ViewStats
 						s.loading = true
-						return s, getHeadToHeadStats(m.homeTeamId, m.awayTeamId, m.homeTeamName, m.awayTeamName)
+						return s, tea.Batch(
+							loadBets(m.id),
+							getHeadToHeadStats(m.homeTeamId, m.awayTeamId, m.homeTeamName, m.awayTeamName),
+						)
 					}
 				}
 				if s.currentView == ViewStats {
@@ -309,11 +312,11 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.loading = false
 		return s, nil
 	case BetsLoaded:
-		s.loading = false
 		items := make([]list.Item, len(msg))
 		for i, bet := range msg {
 			items[i] = bet
 		}
+		s.loading = false
 		return s, s.currentMatchBets.SetItems(items)
 	}
 
@@ -396,29 +399,46 @@ func (s *State) updateBetFormFocus() {
 
 func (s *State) renderSplitView() string {
 	matchesView := s.matches.View()
-	var statsView string
 
+	// Create right column with stats on top and bets on bottom
+	rightColumnView := s.renderRightColumn()
+
+	// Split the viewport horizontally
+	termWidth := s.matches.Width()
+	matchesWidth := termWidth / 2
+	rightColumnWidth := termWidth - matchesWidth
+
+	// Create side-by-side layout
+	matchesStyle := lipgloss.NewStyle().Width(matchesWidth).Padding(0, 1)
+	rightColumnStyle := lipgloss.NewStyle().Width(rightColumnWidth).Padding(0, 1)
+
+	return docStyle.Render(
+		lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			matchesStyle.Render(matchesView),
+			rightColumnStyle.Render(rightColumnView),
+		),
+	)
+}
+
+func (s *State) renderRightColumn() string {
+	// Get the stats view
+	var statsView string
 	if s.showBetForm {
 		statsView = s.renderStatsWithBetForm()
 	} else {
 		statsView = s.renderHeadToHeadStats()
 	}
 
-	// Split the viewport horizontally
-	termWidth := s.matches.Width()
-	matchesWidth := termWidth / 2
-	statsWidth := termWidth - matchesWidth
+	// Get the bets view
+	betsView := s.renderSavedBets()
 
-	// Create side-by-side layout
-	matchesStyle := lipgloss.NewStyle().Width(matchesWidth).Padding(0, 1)
-	statsStyle := lipgloss.NewStyle().Width(statsWidth).Padding(0, 1)
-
-	return docStyle.Render(
-		lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			matchesStyle.Render(matchesView),
-			statsStyle.Render(statsView),
-		),
+	// Create vertical split: stats on top, bets on bottom
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		statsView,
+		"",
+		betsView,
 	)
 }
 
