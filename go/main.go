@@ -103,9 +103,9 @@ type State struct {
 	spinner           spinner.Model
 	showPlayedMatches bool
 	headToHeadStats   HeadToHeadStats
-	betForm           BetForm
 	showBetForm       bool
-	currentMatchBets  []Bet
+	currentMatchBets  list.Model
+	betForm           BetForm
 }
 
 func newState() *State {
@@ -130,6 +130,9 @@ func newState() *State {
 	matchDelegate.Styles.SelectedDesc = matchDelegate.Styles.SelectedDesc.Foreground(blue2).BorderLeftForeground(blue1)
 	state.matches = list.New([]list.Item{}, matchDelegate, 0, 0)
 	state.matches.Title = "Matches"
+
+	state.currentMatchBets = list.New([]list.Item{}, listDelegate, 0, 0)
+	state.currentMatchBets.Title = "Match Bets"
 
 	// Add help key bindings for matches list
 	toggleKey := key.NewBinding(
@@ -279,6 +282,7 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			s.matches.SetSize(msg.Width-h, msg.Height-v)
 		}
+		s.currentMatchBets.SetSize((msg.Width-h)/2, (msg.Height-v)/2)
 	case DBConnected:
 		s.db = msg
 		return s, getLeagues
@@ -287,16 +291,14 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for i, league := range msg {
 			items[i] = league
 		}
-		s.leagues.SetItems(items)
-		return s, nil
+		return s, s.leagues.SetItems(items)
 	case MatchesLoaded:
 		items := make([]list.Item, len(msg))
 		for i, match := range msg {
 			items[i] = match
 		}
-		s.matches.SetItems(items)
 		s.loading = false
-		return s, nil
+		return s, s.matches.SetItems(items)
 	case StatsLoaded:
 		s.headToHeadStats = msg
 		s.loading = false
@@ -307,9 +309,12 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.loading = false
 		return s, nil
 	case BetsLoaded:
-		s.currentMatchBets = msg
 		s.loading = false
-		return s, nil
+		items := make([]list.Item, len(msg))
+		for i, bet := range msg {
+			items[i] = bet
+		}
+		return s, s.currentMatchBets.SetItems(items)
 	}
 
 	var listCmd tea.Cmd
@@ -442,7 +447,7 @@ func (s *State) renderBetsView() string {
 func (s *State) renderSavedBets() string {
 	title := lipgloss.NewStyle().Bold(true).Render("Saved Bets")
 
-	if len(s.currentMatchBets) == 0 {
+	if len(s.currentMatchBets.Items()) == 0 {
 		return lipgloss.JoinVertical(
 			lipgloss.Left,
 			title,
@@ -453,27 +458,7 @@ func (s *State) renderSavedBets() string {
 		)
 	}
 
-	var betLines []string
-	betLines = append(betLines, title)
-	betLines = append(betLines, "")
-
-	for _, bet := range s.currentMatchBets {
-		betLine := fmt.Sprintf("• %s", bet.name)
-		if bet.line != 0 {
-			betLine += fmt.Sprintf(" (Line: %.1f)", bet.line)
-		}
-		betLine += fmt.Sprintf(" ($%.2f)", bet.amount)
-		if bet.odds != 0 {
-			betLine += fmt.Sprintf(" (Odds: %+d)", bet.odds)
-		}
-		betLine += fmt.Sprintf(" [%s]", bet.result)
-		betLines = append(betLines, betLine)
-	}
-
-	betLines = append(betLines, "")
-	betLines = append(betLines, "Press 'Esc' to go back")
-
-	return lipgloss.JoinVertical(lipgloss.Left, betLines...)
+	return lipgloss.JoinVertical(lipgloss.Left, s.currentMatchBets.View())
 }
 
 func (s *State) renderStatsWithBetForm() string {

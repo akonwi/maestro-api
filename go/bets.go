@@ -28,6 +28,13 @@ type Bet struct {
 	result  BetOutcome
 }
 
+// Implement list.Item interface for Bet
+func (b Bet) FilterValue() string { return b.name }
+func (b Bet) Title() string       { return b.name }
+func (b Bet) Description() string {
+	return fmt.Sprintf("%s : %d : %v", strconv.FormatFloat(b.line, 'f', 2, 64), b.odds, b.result)
+}
+
 type BetForm struct {
 	nameInput   textinput.Model
 	lineInput   textinput.Model
