@@ -143,14 +143,15 @@ func (s *State) saveBet() tea.Cmd {
 			}
 		}
 
+		selectedMatch := s.getCurrentMatch()
 		// Insert bet into database
 		_, err = db.Exec("INSERT INTO bets (match_id, name, line, amount, odds, result) VALUES (?, ?, ?, ?, ?, ?)",
-			s.selectedMatch.id, name, line, amount, odds, Pending)
+			selectedMatch.id, name, line, amount, odds, Pending)
 		if err != nil {
 			return ErrMsg{err: fmt.Errorf("failed to save bet: %v", err)}
 		}
 
-		return BetSaved(Bet{matchID: s.selectedMatch.id, name: name, line: line, amount: amount, odds: odds, result: Pending})
+		return BetSaved(Bet{matchID: selectedMatch.id, name: name, line: line, amount: amount, odds: odds, result: Pending})
 	}
 }
 

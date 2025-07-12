@@ -44,6 +44,10 @@ func (m Match) FilterValue() string { return m.homeTeamName + " vs " + m.awayTea
 func (m Match) Title() string       { return m.homeTeamName + " vs " + m.awayTeamName }
 func (m Match) Description() string { return m.score() }
 
+func (m Match) isNil() bool {
+	return m == (Match{})
+}
+
 func (m Match) score() string {
 	if m.status == "NS" {
 		return "TBD"
@@ -61,7 +65,7 @@ type ViewState int
 const (
 	ViewLeagues ViewState = iota
 	ViewMatches
-	ViewStats
+	ViewMatch
 	ViewBetForm
 	ViewBets
 )
@@ -96,7 +100,6 @@ type State struct {
 	leagues           list.Model
 	matches           list.Model
 	selectedLeague    League
-	selectedMatch     Match
 	currentView       ViewState
 	loading           bool
 	spinner           spinner.Model
@@ -163,6 +166,16 @@ func newState() *State {
 	return state
 }
 
+func (s State) getCurrentMatch() Match {
+	var match Match
+
+	if len(s.matches.VisibleItems()) > 0 {
+		match = s.matches.VisibleItems()[s.matches.Index()].(Match)
+	}
+
+	return match
+}
+
 func (s *State) updateMatchesTitle() {
 	if s.showPlayedMatches {
 		s.matches.Title = "Played Matches"
@@ -192,7 +205,7 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					s.currentView = ViewLeagues
 					return s, nil
 				}
-				if s.currentView == ViewStats {
+				if s.currentView == ViewMatch {
 					if s.showBetForm {
 						s.showBetForm = false
 						s.resetBetForm()
@@ -206,7 +219,7 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return s, nil
 				}
 				if s.currentView == ViewBetForm {
-					s.currentView = ViewStats
+					s.currentView = ViewMatch
 					s.showBetForm = false
 					s.resetBetForm()
 					return s, nil
@@ -219,16 +232,16 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return s, getMatches(s.selectedLeague.id, s.showPlayedMatches)
 				}
 			case "b":
-				if s.currentView == ViewStats && !s.showBetForm {
+				if s.currentView == ViewMatch && !s.showBetForm {
 					s.showBetForm = true
 					s.resetBetForm()
 					return s, nil
 				}
 			case "v":
-				if s.currentView == ViewStats && !s.showBetForm {
+				if s.currentView == ViewMatch && !s.showBetForm {
 					s.currentView = ViewBets
 					s.loading = true
-					return s, loadBets(s.selectedMatch.id)
+					return s, loadBets(s.getCurrentMatch().id)
 				}
 			case "tab":
 				if s.showBetForm {
@@ -253,32 +266,23 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				if s.currentView == ViewMatches {
-					m, ok := s.matches.SelectedItem().(Match)
-					if ok {
-						s.selectedMatch = m
-						s.currentView = ViewStats
-						s.loading = true
-						return s, tea.Batch(
-							loadBets(m.id),
-							getHeadToHeadStats(m.homeTeamId, m.awayTeamId, m.homeTeamName, m.awayTeamName),
-						)
-					}
+					return s, getMatchDetails(s.getCurrentMatch())
 				}
-				if s.currentView == ViewStats {
-					m, ok := s.matches.SelectedItem().(Match)
-					if ok {
-						s.selectedMatch = m
-						s.loading = true
-						return s, getHeadToHeadStats(m.homeTeamId, m.awayTeamId, m.homeTeamName, m.awayTeamName)
-					}
-				}
+				// if s.currentView == ViewMatch {
+				// 	m, ok := s.matches.SelectedItem().(Match)
+				// 	if ok {
+				// 		s.selectedMatch = m
+				// 		s.loading = true
+				// 		return s, getHeadToHeadStats(m.homeTeamId, m.awayTeamId, m.homeTeamName, m.awayTeamName)
+				// 	}
+				// }
 				return s, nil
 			}
 		}
 	case tea.WindowSizeMsg:
 		w, h := docStyle.GetFrameSize()
 		s.leagues.SetSize(msg.Width-w, msg.Height-h)
-		if s.currentView == ViewStats {
+		if s.currentView == ViewMatch {
 			// In stats view, matches list takes half the width
 			s.matches.SetSize((msg.Width-w)/2, msg.Height-h)
 			// Size bet list to 50% of right column height
@@ -304,7 +308,8 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			items[i] = match
 		}
 		s.loading = false
-		return s, s.matches.SetItems(items)
+
+		return s, tea.Batch(s.matches.SetItems(items), getMatchDetails(s.getCurrentMatch()))
 	case StatsLoaded:
 		s.headToHeadStats = msg
 		s.loading = false
@@ -331,7 +336,9 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.leagues, listCmd = s.leagues.Update(msg)
 	case ViewMatches:
 		s.matches, listCmd = s.matches.Update(msg)
-	case ViewStats:
+		// set the initially focused match
+		return s, tea.Batch(listCmd, getMatchDetails(s.getCurrentMatch()))
+	case ViewMatch:
 		if s.showBetForm {
 			formCmd = s.updateBetFormInputs(msg)
 		}
@@ -357,12 +364,7 @@ func (s *State) View() string {
 		if s.loading {
 			return docStyle.Render(s.spinner.View() + " Loading Matches")
 		}
-		return docStyle.Render(s.matches.View())
-	case ViewStats:
-		if s.loading {
-			return docStyle.Render(s.spinner.View() + " Loading Stats")
-		}
-		return s.renderSplitView()
+		return s.renderMatchSplitView()
 	case ViewBets:
 		if s.loading {
 			return docStyle.Render(s.spinner.View() + " Loading Bets")
@@ -400,11 +402,11 @@ func (s *State) updateBetFormFocus() {
 	}
 }
 
-func (s *State) renderSplitView() string {
+func (s *State) renderMatchSplitView() string {
 	matchesView := s.matches.View()
 
 	// Create right column with stats on top and bets on bottom
-	rightColumnView := s.renderRightColumn()
+	rightColumnView := s.renderMatchColumn()
 
 	// Split the viewport horizontally
 	termWidth := s.matches.Width()
@@ -424,7 +426,11 @@ func (s *State) renderSplitView() string {
 	)
 }
 
-func (s *State) renderRightColumn() string {
+func (s *State) renderMatchColumn() string {
+	if s.getCurrentMatch().isNil() {
+		return ""
+	}
+
 	// Calculate 50% height for each section
 	rightColumnHeight := s.matches.Height()
 	sectionHeight := rightColumnHeight / 2

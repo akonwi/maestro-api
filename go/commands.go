@@ -133,22 +133,34 @@ func getMatches(leagueID int, showPlayedMatches bool) tea.Cmd {
 	}
 }
 
-func getHeadToHeadStats(homeTeamId, awayTeamId int, homeTeamName, awayTeamName string) tea.Cmd {
+func getMatchDetails(match Match) tea.Cmd {
+	if match.isNil() {
+		return nil
+	}
+
+	return tea.Batch(getHeadToHeadStats(match), loadBets(match.id))
+}
+
+func getHeadToHeadStats(match Match) tea.Cmd {
+	if match.isNil() {
+		return nil
+	}
+
 	return func() tea.Msg {
 		if db == nil {
 			return ErrMsg{err: fmt.Errorf("database not connected")}
 		}
 
 		var stats HeadToHeadStats
-		stats.homeTeamName = homeTeamName
-		stats.awayTeamName = awayTeamName
+		stats.homeTeamName = match.homeTeamName
+		stats.awayTeamName = match.awayTeamName
 
 		// Query all finished matches for home team
 		homeRows, err := db.Query(`
 			SELECT home_team_id, away_team_id, home_goals, away_goals, winner_id
 			FROM matches
 			WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'FT'
-		`, homeTeamId, homeTeamId)
+		`, match.homeTeamId, match.awayTeamId)
 		if err != nil {
 			return ErrMsg{err: err}
 		}
@@ -165,7 +177,7 @@ func getHeadToHeadStats(homeTeamId, awayTeamId int, homeTeamName, awayTeamName s
 
 			stats.homeGamesPlayed++
 
-			if homeId == homeTeamId {
+			if homeId == match.homeTeamId {
 				// Home team is playing at home
 				stats.homeGoalsFor += homeGoals
 				stats.homeGoalsAgainst += awayGoals
@@ -178,9 +190,9 @@ func getHeadToHeadStats(homeTeamId, awayTeamId int, homeTeamName, awayTeamName s
 					stats.home2PlusGoalsConceded++
 				}
 
-				if winnerId.Valid && int(winnerId.Int64) == homeTeamId {
+				if winnerId.Valid && int(winnerId.Int64) == match.homeTeamId {
 					stats.homeWins++
-				} else if winnerId.Valid && int(winnerId.Int64) == awayId {
+				} else if winnerId.Valid && int(winnerId.Int64) == match.awayTeamId {
 					// Home team lost
 				} else {
 					stats.draws++
@@ -198,7 +210,7 @@ func getHeadToHeadStats(homeTeamId, awayTeamId int, homeTeamName, awayTeamName s
 					stats.home2PlusGoalsConceded++
 				}
 
-				if winnerId.Valid && int(winnerId.Int64) == homeTeamId {
+				if winnerId.Valid && int(winnerId.Int64) == match.awayTeamId {
 					stats.homeWins++
 				} else if winnerId.Valid && int(winnerId.Int64) == homeId {
 					// Home team lost
@@ -213,7 +225,7 @@ func getHeadToHeadStats(homeTeamId, awayTeamId int, homeTeamName, awayTeamName s
 			SELECT home_team_id, away_team_id, home_goals, away_goals, winner_id
 			FROM matches
 			WHERE (home_team_id = ? OR away_team_id = ?) AND status = 'FT'
-		`, awayTeamId, awayTeamId)
+		`, match.awayTeamId, match.awayTeamId)
 		if err != nil {
 			return ErrMsg{err: err}
 		}
@@ -230,7 +242,7 @@ func getHeadToHeadStats(homeTeamId, awayTeamId int, homeTeamName, awayTeamName s
 
 			stats.awayGamesPlayed++
 
-			if homeId == awayTeamId {
+			if homeId == match.awayTeamId {
 				// Away team is playing at home
 				stats.awayGoalsFor += homeGoals
 				stats.awayGoalsAgainst += awayGoals
@@ -243,7 +255,7 @@ func getHeadToHeadStats(homeTeamId, awayTeamId int, homeTeamName, awayTeamName s
 					stats.away2PlusGoalsConceded++
 				}
 
-				if winnerId.Valid && int(winnerId.Int64) == awayTeamId {
+				if winnerId.Valid && int(winnerId.Int64) == match.awayTeamId {
 					stats.awayWins++
 				}
 			} else {
@@ -259,7 +271,7 @@ func getHeadToHeadStats(homeTeamId, awayTeamId int, homeTeamName, awayTeamName s
 					stats.away2PlusGoalsConceded++
 				}
 
-				if winnerId.Valid && int(winnerId.Int64) == awayTeamId {
+				if winnerId.Valid && int(winnerId.Int64) == match.awayTeamId {
 					stats.awayWins++
 				}
 			}
