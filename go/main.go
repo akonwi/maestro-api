@@ -406,7 +406,7 @@ func (s *State) renderMatchSplitView() string {
 	matchesView := s.matches.View()
 
 	// Create right column with stats on top and bets on bottom
-	rightColumnView := s.renderMatchColumn()
+	rightColumnView := s.renderDetailMatchColumn()
 
 	// Split the viewport horizontally
 	termWidth := s.matches.Width()
@@ -426,7 +426,7 @@ func (s *State) renderMatchSplitView() string {
 	)
 }
 
-func (s *State) renderMatchColumn() string {
+func (s *State) renderDetailMatchColumn() string {
 	if s.getCurrentMatch().isNil() {
 		return ""
 	}
@@ -436,12 +436,7 @@ func (s *State) renderMatchColumn() string {
 	sectionHeight := rightColumnHeight / 2
 
 	// Get the stats view
-	var statsView string
-	if s.showBetForm {
-		statsView = s.renderStatsWithBetForm()
-	} else {
-		statsView = s.renderHeadToHeadStats()
-	}
+	statsView := s.renderHeadToHeadStats()
 
 	// Get the bets view
 	betsView := s.renderSavedBets()
@@ -494,7 +489,7 @@ func (s *State) renderSavedBets() string {
 		)
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, s.currentMatchBets.View())
+	return s.currentMatchBets.View()
 }
 
 func (s *State) renderStatsWithBetForm() string {
