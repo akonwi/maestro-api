@@ -97,6 +97,9 @@ type KeyMap struct {
 	GameStatus  key.Binding
 	ShowBetForm key.Binding
 	ToggleBets  key.Binding
+	BetWin      key.Binding
+	BetLose     key.Binding
+	BetPush     key.Binding
 }
 
 var defaultKeyMap = KeyMap{
@@ -112,6 +115,18 @@ var defaultKeyMap = KeyMap{
 	ShowBetForm: key.NewBinding(
 		key.WithKeys("b"),
 		key.WithHelp("b", "bet form"),
+	),
+	BetWin: key.NewBinding(
+		key.WithKeys("w"),
+		key.WithHelp("w", "mark win"),
+	),
+	BetLose: key.NewBinding(
+		key.WithKeys("l"),
+		key.WithHelp("l", "mark lose"),
+	),
+	BetPush: key.NewBinding(
+		key.WithKeys("p"),
+		key.WithHelp("p", "mark push"),
 	),
 }
 
@@ -176,7 +191,7 @@ func newState() *State {
 
 	// Priority keys shown in main help view
 	state.currentMatchBets.AdditionalShortHelpKeys = func() []key.Binding {
-		return []key.Binding{defaultKeyMap.ToggleBets, defaultKeyMap.ShowBetForm}
+		return []key.Binding{defaultKeyMap.ToggleBets, defaultKeyMap.ShowBetForm, defaultKeyMap.BetWin, defaultKeyMap.BetLose, defaultKeyMap.BetPush}
 	}
 
 	// // Additional keys shown in "more" help section
@@ -231,6 +246,18 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return handleBetFormKey(s, msg)
 			}
 
+			// Handle bet result updates when focused on bet list
+			if s.betsFocused && s.currentView == ViewMatches {
+				switch msg.String() {
+				case "w":
+					return s, s.updateBetResult(Win)
+				case "l":
+					return s, s.updateBetResult(Lose)
+				case "p":
+					return s, s.updateBetResult(Push)
+				}
+			}
+
 			switch {
 			case key.Matches(msg, defaultKeyMap.Back):
 				if s.showBetForm {
@@ -271,12 +298,6 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch keypress := msg.String(); keypress {
 			case "ctrl+c":
 				return s, tea.Quit
-			// case "b":
-			// 	if s.currentView == ViewMatch && !s.showBetForm {
-			// 		s.showBetForm = true
-			// 		s.resetBetForm()
-			// 		return s, nil
-			// 	}
 			case "enter":
 				if s.currentView == ViewLeagues {
 					l, ok := s.leagues.SelectedItem().(League)
@@ -332,6 +353,9 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		s.loading = false
 		return s, s.currentMatchBets.SetItems(items)
+	case BetResultUpdated:
+		// Reload bets to reflect the updated result
+		return s, loadBets(s.getCurrentMatch().id)
 	}
 
 	var listCmd tea.Cmd
@@ -344,8 +368,12 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if s.showBetForm {
 			return s, s.updateBetFormInputs(msg)
 		}
-		s.matches, listCmd = s.matches.Update(msg)
-		return s, tea.Batch(listCmd, getMatchDetails(s.getCurrentMatch()))
+		if s.betsFocused {
+			s.currentMatchBets, listCmd = s.currentMatchBets.Update(msg)
+		} else {
+			s.matches, listCmd = s.matches.Update(msg)
+			return s, tea.Batch(listCmd, getMatchDetails(s.getCurrentMatch()))
+		}
 	}
 	s.spinner, spinnerCmd = s.spinner.Update(msg)
 

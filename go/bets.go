@@ -96,6 +96,11 @@ type BetSaved = Bet
 
 type BetsLoaded = []Bet
 
+type BetResultUpdated struct {
+	betID  int
+	result BetOutcome
+}
+
 func loadBets(matchID int) tea.Cmd {
 	return func() tea.Msg {
 		rows, err := db.Query("SELECT id, name, line, amount, odds, result FROM bets WHERE match_id = ?", matchID)
@@ -116,6 +121,17 @@ func loadBets(matchID int) tea.Cmd {
 		}
 
 		return BetsLoaded(bets)
+	}
+}
+
+func updateBetResult(betID int, result BetOutcome) tea.Cmd {
+	return func() tea.Msg {
+		_, err := db.Exec("UPDATE bets SET result = ? WHERE id = ?", result, betID)
+		if err != nil {
+			return ErrMsg{err: fmt.Errorf("failed to update bet result: %v", err)}
+		}
+
+		return BetResultUpdated{betID: betID, result: result}
 	}
 }
 
@@ -169,6 +185,15 @@ func (s *State) saveBet() tea.Cmd {
 
 		return BetSaved(Bet{matchID: selectedMatch.id, name: name, line: line, amount: amount, odds: odds, result: Pending})
 	}
+}
+
+func (s *State) updateBetResult(result BetOutcome) tea.Cmd {
+	if len(s.currentMatchBets.Items()) == 0 {
+		return nil
+	}
+
+	selectedBet := s.currentMatchBets.SelectedItem().(Bet)
+	return updateBetResult(selectedBet.id, result)
 }
 
 /*
