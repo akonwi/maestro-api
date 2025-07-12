@@ -66,9 +66,6 @@ type ViewState int
 const (
 	ViewLeagues ViewState = iota
 	ViewMatches
-	ViewMatch
-	ViewBetForm
-	ViewBets
 )
 
 type HeadToHeadStats struct {
@@ -96,12 +93,14 @@ type HeadToHeadStats struct {
 }
 
 type KeyMap struct {
+	Back        key.Binding
 	GameStatus  key.Binding
 	ShowBetForm key.Binding
 	ToggleBets  key.Binding
 }
 
 var defaultKeyMap = KeyMap{
+	Back: key.NewBinding(key.WithKeys("esc")),
 	GameStatus: key.NewBinding(
 		key.WithKeys("s"),
 		key.WithHelp("s", "toggle played/unplayed"),
@@ -228,7 +227,28 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return s, nil
 	case tea.KeyMsg:
 		{
+			if s.showBetForm {
+				return handleBetFormKey(s, msg)
+			}
+
 			switch {
+			case key.Matches(msg, defaultKeyMap.Back):
+				if s.showBetForm {
+					// if s.betForm.isDirty() {
+					//   // s.resetForm()
+					// }
+
+					s.showBetForm = false
+					return s, nil
+				}
+				if s.betsFocused {
+					s.toggleBetFocus()
+					return s, nil
+				}
+				if s.currentView == ViewMatches {
+					s.currentView = ViewLeagues
+					return s, nil
+				}
 			case key.Matches(msg, defaultKeyMap.GameStatus):
 				if s.currentView == ViewMatches {
 					s.showPlayedMatches = !s.showPlayedMatches
@@ -241,58 +261,23 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					s.toggleBetFocus()
 					return s, nil
 				}
+			case key.Matches(msg, defaultKeyMap.ShowBetForm):
+				if s.betsFocused {
+					s.showBetForm = true
+					return s, nil
+				}
 			}
 
 			switch keypress := msg.String(); keypress {
 			case "ctrl+c":
 				return s, tea.Quit
-			case "esc":
-				if s.currentView == ViewMatches {
-					s.currentView = ViewLeagues
-					return s, nil
-				}
-				if s.currentView == ViewMatch {
-					if s.showBetForm {
-						s.showBetForm = false
-						s.resetBetForm()
-						return s, nil
-					}
-					s.currentView = ViewMatches
-					return s, nil
-				}
-				if s.currentView == ViewBets {
-					s.currentView = ViewMatches
-					return s, nil
-				}
-				if s.currentView == ViewBetForm {
-					s.currentView = ViewMatch
-					s.showBetForm = false
-					s.resetBetForm()
-					return s, nil
-				}
 			// case "b":
 			// 	if s.currentView == ViewMatch && !s.showBetForm {
 			// 		s.showBetForm = true
 			// 		s.resetBetForm()
 			// 		return s, nil
 			// 	}
-			case "v":
-				if s.currentView == ViewMatch && !s.showBetForm {
-					s.currentView = ViewBets
-					s.loading = true
-					return s, loadBets(s.getCurrentMatch().id)
-				}
-			case "tab":
-				if s.showBetForm {
-					s.betForm.focused = (s.betForm.focused + 1) % 4
-					s.updateBetFormFocus()
-					return s, nil
-				}
 			case "enter":
-				// if s.showBetForm {
-				// 	s.loading = true
-				// 	return s, s.saveBet()
-				// }
 				if s.currentView == ViewLeagues {
 					l, ok := s.leagues.SelectedItem().(League)
 					if ok {
@@ -307,31 +292,14 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if s.currentView == ViewMatches {
 					return s, getMatchDetails(s.getCurrentMatch())
 				}
-				// if s.currentView == ViewMatch {
-				// 	m, ok := s.matches.SelectedItem().(Match)
-				// 	if ok {
-				// 		s.selectedMatch = m
-				// 		s.loading = true
-				// 		return s, getHeadToHeadStats(m.homeTeamId, m.awayTeamId, m.homeTeamName, m.awayTeamName)
-				// 	}
-				// }
 				return s, nil
 			}
 		}
 	case tea.WindowSizeMsg:
 		w, h := docStyle.GetFrameSize()
 		s.leagues.SetSize(msg.Width-w, msg.Height-h)
-		if s.currentView == ViewMatch {
-			// In stats view, matches list takes half the width
-			s.matches.SetSize((msg.Width-w)/2, msg.Height-h)
-			// Size bet list to 50% of right column height
-			rightColumnHeight := msg.Height - h
-			betListHeight := rightColumnHeight / 2
-			s.currentMatchBets.SetSize((msg.Width-w)/2, betListHeight)
-		} else {
-			s.matches.SetSize(msg.Width-w, msg.Height-h)
-			s.currentMatchBets.SetSize((msg.Width-w)/2, (msg.Height-h)/2)
-		}
+		s.matches.SetSize(msg.Width-w, msg.Height-h)
+		s.currentMatchBets.SetSize((msg.Width-w)/2, (msg.Height-h)/2)
 	case DBConnected:
 		s.db = msg
 		return s, getLeagues
@@ -356,7 +324,6 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case BetSaved:
 		s.showBetForm = false
 		s.resetBetForm()
-		s.loading = false
 		return s, nil
 	case BetsLoaded:
 		items := make([]list.Item, len(msg))
@@ -374,16 +341,11 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ViewLeagues:
 		s.leagues, listCmd = s.leagues.Update(msg)
 	case ViewMatches:
-		s.matches, listCmd = s.matches.Update(msg)
-		// set the initially focused match
-		return s, tea.Batch(listCmd, getMatchDetails(s.getCurrentMatch()))
-	case ViewMatch:
 		if s.showBetForm {
-			formCmd = s.updateBetFormInputs(msg)
+			return s, s.updateBetFormInputs(msg)
 		}
 		s.matches, listCmd = s.matches.Update(msg)
-	case ViewBets:
-		s.matches, listCmd = s.matches.Update(msg)
+		return s, tea.Batch(listCmd, getMatchDetails(s.getCurrentMatch()))
 	}
 	s.spinner, spinnerCmd = s.spinner.Update(msg)
 
@@ -404,11 +366,6 @@ func (s *State) View() string {
 			return docStyle.Render(s.spinner.View() + " Loading Matches")
 		}
 		return s.renderMatchSplitView()
-	case ViewBets:
-		if s.loading {
-			return docStyle.Render(s.spinner.View() + " Loading Bets")
-		}
-		return s.renderBetsView()
 	default:
 		return docStyle.Render(s.leagues.View())
 	}
@@ -478,7 +435,7 @@ func (s *State) renderDetailMatchColumn() string {
 	statsView := s.renderHeadToHeadStats()
 
 	// Get the bets view
-	betsView := s.renderSavedBets()
+	betsView := s.renderMatchBetsSection()
 
 	// Apply height constraints to make each section exactly 50%
 	statsStyle := lipgloss.NewStyle().Height(sectionHeight)
@@ -492,40 +449,9 @@ func (s *State) renderDetailMatchColumn() string {
 	)
 }
 
-func (s *State) renderBetsView() string {
-	matchesView := s.matches.View()
-	betsView := s.renderSavedBets()
-
-	// Split the viewport horizontally
-	termWidth := s.matches.Width()
-	matchesWidth := termWidth / 2
-	betsWidth := termWidth - matchesWidth
-
-	// Create side-by-side layout
-	matchesStyle := lipgloss.NewStyle().Width(matchesWidth).Padding(0, 1)
-	betsStyle := lipgloss.NewStyle().Width(betsWidth).Padding(0, 1)
-
-	return docStyle.Render(
-		lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			matchesStyle.Render(matchesView),
-			betsStyle.Render(betsView),
-		),
-	)
-}
-
-func (s *State) renderSavedBets() string {
-	title := lipgloss.NewStyle().Bold(true).Render("Saved Bets")
-
-	if len(s.currentMatchBets.Items()) == 0 {
-		return lipgloss.JoinVertical(
-			lipgloss.Left,
-			title,
-			"",
-			"No bets for this match.",
-			"",
-			"Press 'Esc' to go back",
-		)
+func (s *State) renderMatchBetsSection() string {
+	if s.showBetForm {
+		return s.renderBetForm()
 	}
 
 	return s.currentMatchBets.View()

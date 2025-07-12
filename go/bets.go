@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -68,6 +69,21 @@ func newBetForm() BetForm {
 
 	betForm.focused = 0
 	return *betForm
+}
+
+func (f BetForm) isDirty() bool {
+	if f.nameInput.Value() != "" || f.lineInput.Value() != "" || f.amountInput.Value() != "" || f.oddsInput.Value() != "" {
+		return true
+	}
+	return false
+}
+
+func (f BetForm) escapeDesc() string {
+	if f.isDirty() {
+		return "Clear"
+	}
+
+	return "Close"
 }
 
 /*
@@ -175,6 +191,25 @@ func (s *State) updateBetFormInputs(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
+func handleBetFormKey(s *State, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, defaultKeyMap.Back):
+		if s.betForm.isDirty() {
+			s.resetBetForm()
+			return s, nil
+		}
+		s.showBetForm = false
+		return s, nil
+	case msg.String() == "tab":
+		s.betForm.focused = (s.betForm.focused + 1) % 4
+		s.updateBetFormFocus()
+		return s, nil
+	case msg.String() == "enter":
+		return s, s.saveBet()
+	}
+	return s, s.updateBetFormInputs(msg)
+}
+
 /*
  * -------------
  * Views
@@ -191,12 +226,13 @@ Line: %s
 Odds: %s
 Amount: %s
 
-Tab: Next field | Esc: Cancel | Enter: Save`,
+Tab: Next field | Esc: %s | Enter: Save`,
 		title,
 		s.betForm.nameInput.View(),
 		s.betForm.lineInput.View(),
 		s.betForm.oddsInput.View(),
 		s.betForm.amountInput.View(),
+		s.betForm.escapeDesc(),
 	)
 
 	return lipgloss.NewStyle().
