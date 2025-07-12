@@ -100,6 +100,7 @@ type KeyMap struct {
 	BetWin      key.Binding
 	BetLose     key.Binding
 	BetPush     key.Binding
+	DeleteBet   key.Binding
 }
 
 var defaultKeyMap = KeyMap{
@@ -128,6 +129,10 @@ var defaultKeyMap = KeyMap{
 		key.WithKeys("p"),
 		key.WithHelp("p", "mark push"),
 	),
+	DeleteBet: key.NewBinding(
+		key.WithKeys("backspace"),
+		key.WithHelp("⌫", "delete bet"),
+	),
 }
 
 type State struct {
@@ -147,9 +152,11 @@ type State struct {
 	showPlayedMatches bool
 	headToHeadStats   HeadToHeadStats
 	showBetForm       bool
-	currentMatchBets  list.Model
-	betForm           BetForm
-	betsFocused       bool
+	currentMatchBets     list.Model
+	betForm              BetForm
+	betsFocused          bool
+	showDeleteConfirm    bool
+	betToDelete          *Bet
 }
 
 func newState() *State {
@@ -191,7 +198,7 @@ func newState() *State {
 
 	// Priority keys shown in main help view
 	state.currentMatchBets.AdditionalShortHelpKeys = func() []key.Binding {
-		return []key.Binding{defaultKeyMap.ToggleBets, defaultKeyMap.ShowBetForm, defaultKeyMap.BetWin, defaultKeyMap.BetLose, defaultKeyMap.BetPush}
+		return []key.Binding{defaultKeyMap.ToggleBets, defaultKeyMap.ShowBetForm, defaultKeyMap.BetWin, defaultKeyMap.BetLose, defaultKeyMap.BetPush, defaultKeyMap.DeleteBet}
 	}
 
 	// // Additional keys shown in "more" help section
@@ -246,6 +253,25 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return handleBetFormKey(s, msg)
 			}
 
+			// Handle delete confirmation
+			if s.showDeleteConfirm {
+				switch msg.String() {
+				case "y", "Y":
+					s.showDeleteConfirm = false
+					if s.betToDelete != nil {
+						betID := s.betToDelete.id
+						s.betToDelete = nil
+						return s, deleteBet(betID)
+					}
+					return s, nil
+				case "n", "N", "esc":
+					s.showDeleteConfirm = false
+					s.betToDelete = nil
+					return s, nil
+				}
+				return s, nil
+			}
+
 			// Handle bet result updates when focused on bet list
 			if s.betsFocused && s.currentView == ViewMatches {
 				switch msg.String() {
@@ -255,6 +281,13 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return s, s.updateBetResult(Lose)
 				case "p":
 					return s, s.updateBetResult(Push)
+				case "backspace":
+					if len(s.currentMatchBets.Items()) > 0 {
+						selectedBet := s.currentMatchBets.SelectedItem().(Bet)
+						s.betToDelete = &selectedBet
+						s.showDeleteConfirm = true
+						return s, nil
+					}
 				}
 			}
 
@@ -355,6 +388,9 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return s, s.currentMatchBets.SetItems(items)
 	case BetResultUpdated:
 		// Reload bets to reflect the updated result
+		return s, loadBets(s.getCurrentMatch().id)
+	case BetDeleted:
+		// Reload bets to reflect the deletion
 		return s, loadBets(s.getCurrentMatch().id)
 	}
 
@@ -482,7 +518,36 @@ func (s *State) renderMatchBetsSection() string {
 		return s.renderBetForm()
 	}
 
+	if s.showDeleteConfirm {
+		return s.renderDeleteConfirmation()
+	}
+
 	return s.currentMatchBets.View()
+}
+
+func (s *State) renderDeleteConfirmation() string {
+	if s.betToDelete == nil {
+		return ""
+	}
+
+	title := lipgloss.NewStyle().Bold(true).Render("Delete Bet")
+	betName := s.betToDelete.name
+	if betName == "" {
+		betName = "Unnamed bet"
+	}
+
+	confirmation := fmt.Sprintf(`%s
+
+Are you sure you want to delete:
+"%s"?
+
+Y: Yes, delete | N: No, cancel`, title, betName)
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("196")). // Red border
+		Padding(1).
+		Render(confirmation)
 }
 
 func (s *State) renderStatsWithBetForm() string {

@@ -101,6 +101,10 @@ type BetResultUpdated struct {
 	result BetOutcome
 }
 
+type BetDeleted struct {
+	betID int
+}
+
 func loadBets(matchID int) tea.Cmd {
 	return func() tea.Msg {
 		rows, err := db.Query("SELECT id, name, line, amount, odds, result FROM bets WHERE match_id = ?", matchID)
@@ -132,6 +136,17 @@ func updateBetResult(betID int, result BetOutcome) tea.Cmd {
 		}
 
 		return BetResultUpdated{betID: betID, result: result}
+	}
+}
+
+func deleteBet(betID int) tea.Cmd {
+	return func() tea.Msg {
+		_, err := db.Exec("DELETE FROM bets WHERE id = ?", betID)
+		if err != nil {
+			return ErrMsg{err: fmt.Errorf("failed to delete bet: %v", err)}
+		}
+
+		return BetDeleted{betID: betID}
 	}
 }
 
