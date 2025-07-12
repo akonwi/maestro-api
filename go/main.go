@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -43,7 +45,25 @@ type Match struct {
 // Implement list.Item interface for Match
 func (m Match) FilterValue() string { return m.homeTeamName + " vs " + m.awayTeamName }
 func (m Match) Title() string       { return m.homeTeamName + " vs " + m.awayTeamName }
-func (m Match) Description() string { return m.score() }
+func (m Match) Description() string {
+	score := m.score()
+	dateStr := m.formatDate()
+
+	// Create a description with score on left and date on right
+	// Assuming a width of about 50 characters for the description area
+	totalWidth := 50
+	scoreLen := len(score)
+	dateLen := len(dateStr)
+
+	if scoreLen+dateLen >= totalWidth {
+		// If too long, just show score and date separated by space
+		return fmt.Sprintf("%s %s", score, dateStr)
+	}
+
+	// Right-align the date
+	padding := totalWidth - scoreLen - dateLen
+	return fmt.Sprintf("%s%s%s", score, strings.Repeat(" ", padding), dateStr)
+}
 
 func (m Match) isNil() bool {
 	return m == (Match{})
@@ -54,6 +74,23 @@ func (m Match) score() string {
 		return "TBD"
 	}
 	return fmt.Sprintf("%d - %d (%s)", m.homeGoals, m.awayGoals, m.status)
+}
+
+func (m Match) formatDate() string {
+	// Handle full timestamp format like "2025-07-12T23:30:00+00:00"
+	// First try to parse as full timestamp
+	t, err := time.Parse(time.RFC3339, m.date)
+	if err != nil {
+		// If that fails, try just the date part
+		t, err = time.Parse("2006-01-02", m.date)
+		if err != nil {
+			// If parsing fails, return the original date
+			return m.date
+		}
+	}
+
+	// Format as M/D/YYYY
+	return t.Format("01/02/2006")
 }
 
 // Implement list.Item interface for League
@@ -152,11 +189,11 @@ type State struct {
 	showPlayedMatches bool
 	headToHeadStats   HeadToHeadStats
 	showBetForm       bool
-	currentMatchBets     list.Model
-	betForm              BetForm
-	betsFocused          bool
-	showDeleteConfirm    bool
-	betToDelete          *Bet
+	currentMatchBets  list.Model
+	betForm           BetForm
+	betsFocused       bool
+	showDeleteConfirm bool
+	betToDelete       *Bet
 }
 
 func newState() *State {
