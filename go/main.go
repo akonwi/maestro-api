@@ -9,7 +9,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -176,9 +175,6 @@ type State struct {
 	db  *sql.DB
 	err error
 
-	loading bool
-	spinner spinner.Model
-
 	currentView ViewState
 
 	leagues        list.Model
@@ -198,11 +194,6 @@ type State struct {
 
 func newState() *State {
 	state := &State{}
-
-	// Initialize spinner
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	state.spinner = sp
 
 	listDelegate := list.NewDefaultDelegate()
 	blue1 := lipgloss.Color("38")
@@ -349,7 +340,6 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case key.Matches(msg, defaultKeyMap.GameStatus):
 				if s.currentView == ViewMatches {
 					s.showPlayedMatches = !s.showPlayedMatches
-					s.loading = true
 					s.updateMatchesTitle()
 					return s, getMatches(s.selectedLeague.id, s.showPlayedMatches)
 				}
@@ -374,7 +364,6 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if ok {
 						s.selectedLeague = l
 						s.currentView = ViewMatches
-						s.loading = true
 						s.showPlayedMatches = false
 						s.updateMatchesTitle()
 						return s, getMatches(l.id, s.showPlayedMatches)
@@ -405,23 +394,20 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for i, match := range msg {
 			items[i] = match
 		}
-		s.loading = false
 
 		return s, tea.Batch(s.matches.SetItems(items), getMatchDetails(s.getCurrentMatch()))
 	case StatsLoaded:
 		s.headToHeadStats = msg
-		s.loading = false
 		return s, nil
 	case BetSaved:
 		s.showBetForm = false
 		s.resetBetForm()
-		return s, nil
+		return s, loadBets(msg.matchID)
 	case BetsLoaded:
 		items := make([]list.Item, len(msg))
 		for i, bet := range msg {
 			items[i] = bet
 		}
-		s.loading = false
 		return s, s.currentMatchBets.SetItems(items)
 	case BetResultUpdated:
 		// Reload bets to reflect the updated result
@@ -432,11 +418,11 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	var listCmd tea.Cmd
-	var spinnerCmd tea.Cmd
 	var formCmd tea.Cmd
 	switch s.currentView {
 	case ViewLeagues:
 		s.leagues, listCmd = s.leagues.Update(msg)
+		return s, listCmd
 	case ViewMatches:
 		if s.showBetForm {
 			return s, s.updateBetFormInputs(msg)
@@ -448,9 +434,8 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return s, tea.Batch(listCmd, getMatchDetails(s.getCurrentMatch()))
 		}
 	}
-	s.spinner, spinnerCmd = s.spinner.Update(msg)
 
-	return s, tea.Batch(listCmd, spinnerCmd, formCmd)
+	return s, tea.Batch(listCmd, formCmd)
 }
 
 // View implements tea.Model.
@@ -463,12 +448,9 @@ func (s *State) View() string {
 	case ViewLeagues:
 		return docStyle.Render(s.leagues.View())
 	case ViewMatches:
-		if s.loading {
-			return docStyle.Render(s.spinner.View() + " Loading Matches")
-		}
 		return s.renderMatchSplitView()
 	default:
-		return docStyle.Render(s.leagues.View())
+		return fmt.Sprintf("Unhandled view: %d", s.currentView)
 	}
 }
 
