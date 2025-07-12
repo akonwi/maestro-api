@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -94,20 +95,47 @@ type HeadToHeadStats struct {
 	awayGamesPlayed        int
 }
 
+type KeyMap struct {
+	GameStatus  key.Binding
+	ShowBetForm key.Binding
+	ToggleBets  key.Binding
+}
+
+var defaultKeyMap = KeyMap{
+	GameStatus: key.NewBinding(
+		key.WithKeys("s"),
+		key.WithHelp("s", "toggle played/unplayed"),
+	),
+	ToggleBets: key.NewBinding(
+		key.WithKeys("t"),
+		key.WithHelp("t", "focus bets|matches"),
+	),
+	ShowBetForm: key.NewBinding(
+		key.WithKeys("b"),
+		key.WithHelp("b", "bet form"),
+	),
+}
+
 type State struct {
-	db                *sql.DB
-	err               error
-	leagues           list.Model
+	db  *sql.DB
+	err error
+
+	loading bool
+	spinner spinner.Model
+
+	currentView ViewState
+
+	leagues        list.Model
+	selectedLeague League
+
+	/* Matches Screen */
 	matches           list.Model
-	selectedLeague    League
-	currentView       ViewState
-	loading           bool
-	spinner           spinner.Model
 	showPlayedMatches bool
 	headToHeadStats   HeadToHeadStats
 	showBetForm       bool
 	currentMatchBets  list.Model
 	betForm           BetForm
+	betsFocused       bool
 }
 
 func newState() *State {
@@ -135,12 +163,9 @@ func newState() *State {
 
 	state.currentMatchBets = list.New([]list.Item{}, listDelegate, 0, 0)
 	state.currentMatchBets.Title = "Match Bets"
+	state.currentMatchBets.SetShowHelp(false)
 
 	// Add help key bindings for matches list
-	// toggleKey := key.NewBinding(
-	// 	key.WithKeys("s"),
-	// 	key.WithHelp("s", "toggle played/unplayed"),
-	// )
 	// betKey := key.NewBinding(
 	// 	key.WithKeys("b"),
 	// 	key.WithHelp("b", "place bet"),
@@ -150,10 +175,10 @@ func newState() *State {
 	// 	key.WithHelp("v", "view bets"),
 	// )
 
-	// // Priority keys shown in main help view
-	// state.matches.AdditionalShortHelpKeys = func() []key.Binding {
-	// 	return []key.Binding{toggleKey, betKey, viewBetsKey}
-	// }
+	// Priority keys shown in main help view
+	state.currentMatchBets.AdditionalShortHelpKeys = func() []key.Binding {
+		return []key.Binding{defaultKeyMap.ToggleBets, defaultKeyMap.ShowBetForm}
+	}
 
 	// // Additional keys shown in "more" help section
 	// state.matches.AdditionalFullHelpKeys = func() []key.Binding {
@@ -189,6 +214,12 @@ func (s *State) Init() tea.Cmd {
 	return openDB
 }
 
+func (s *State) toggleBetFocus() {
+	s.betsFocused = !s.betsFocused
+	s.matches.SetShowHelp(!s.betsFocused)
+	s.currentMatchBets.SetShowHelp(s.betsFocused)
+}
+
 // Update implements tea.Model.
 func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -197,6 +228,21 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return s, nil
 	case tea.KeyMsg:
 		{
+			switch {
+			case key.Matches(msg, defaultKeyMap.GameStatus):
+				if s.currentView == ViewMatches {
+					s.showPlayedMatches = !s.showPlayedMatches
+					s.loading = true
+					s.updateMatchesTitle()
+					return s, getMatches(s.selectedLeague.id, s.showPlayedMatches)
+				}
+			case key.Matches(msg, defaultKeyMap.ToggleBets):
+				if s.currentView == ViewMatches {
+					s.toggleBetFocus()
+					return s, nil
+				}
+			}
+
 			switch keypress := msg.String(); keypress {
 			case "ctrl+c":
 				return s, tea.Quit
@@ -224,19 +270,12 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					s.resetBetForm()
 					return s, nil
 				}
-			case "s":
-				if s.currentView == ViewMatches {
-					s.showPlayedMatches = !s.showPlayedMatches
-					s.loading = true
-					s.updateMatchesTitle()
-					return s, getMatches(s.selectedLeague.id, s.showPlayedMatches)
-				}
-			case "b":
-				if s.currentView == ViewMatch && !s.showBetForm {
-					s.showBetForm = true
-					s.resetBetForm()
-					return s, nil
-				}
+			// case "b":
+			// 	if s.currentView == ViewMatch && !s.showBetForm {
+			// 		s.showBetForm = true
+			// 		s.resetBetForm()
+			// 		return s, nil
+			// 	}
 			case "v":
 				if s.currentView == ViewMatch && !s.showBetForm {
 					s.currentView = ViewBets
