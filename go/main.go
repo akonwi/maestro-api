@@ -213,6 +213,9 @@ type State struct {
 	bettingPerformance BettingPerformance
 	betHistoryTable    table.Model
 	allBetsData        []Bet // Store bet data for table operations
+	overviewMaxHeight  int   // Maximum height for overview section
+	tableMaxHeight     int   // Maximum height for table section
+	terminalWidth      int   // Current terminal width for card sizing
 }
 
 func newState() *State {
@@ -294,7 +297,7 @@ func newState() *State {
 	// 	return []key.Binding{toggleKey, betKey, viewBetsKey}
 	// }
 
-	state.currentView = ViewLeagues
+	state.currentView = ViewBettingOverview
 	state.showPlayedMatches = false
 	state.betForm = newBetForm()
 	return state
@@ -464,21 +467,32 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.matches.SetSize(msg.Width-w, msg.Height-h)
 		s.currentMatchBets.SetSize((msg.Width-w)/2, (msg.Height-h)/2)
 
-		// Size table for betting overview - calculate available height
-		// Account for: title, overview cards, spacing, help text
+		// Size components for betting overview - split viewport 50/50
 		availableHeight := msg.Height - h
-		overviewHeight := 8 // Estimated height for overview cards + title + spacing
-		helpHeight := 2     // Help text height + spacing
-		tableHeight := availableHeight - overviewHeight - helpHeight
-		if tableHeight < 5 {
-			tableHeight = 5 // Minimum table height
+		
+		// Split available height evenly between overview and table sections
+		sectionHeight := availableHeight / 2
+		
+		// Overview section gets 50% of viewport
+		overviewHeight := sectionHeight
+		
+		// Table section gets 50% of viewport (minus small space for help text)
+		helpHeight := 1  // Just one line for help
+		tableHeight := sectionHeight - helpHeight
+		if tableHeight < 3 {
+			tableHeight = 3 // Minimum table height
 		}
-
+		
 		s.betHistoryTable.SetWidth(msg.Width - w)
 		s.betHistoryTable.SetHeight(tableHeight)
+		
+		// Store the calculated heights and width for use in rendering
+		s.overviewMaxHeight = overviewHeight
+		s.tableMaxHeight = tableHeight
+		s.terminalWidth = msg.Width
 	case DBConnected:
 		s.db = msg
-		return s, getLeagues
+		return s, tea.Batch(getLeagues, loadAllBets(), loadBettingPerformance())
 	case LeaguesLoaded:
 		items := make([]list.Item, len(msg))
 		for i, league := range msg {
@@ -706,13 +720,23 @@ func (s *State) renderBettingOverview() string {
 	overview := s.renderPerformanceOverview()
 	betHistory := s.renderBetHistoryTable()
 
+	// Constrain overview section to exactly 50% of viewport
+	maxHeight := s.overviewMaxHeight
+	if maxHeight == 0 {
+		maxHeight = 8 // Fallback if not set yet
+	}
+	
+	constrainedOverview := lipgloss.NewStyle().
+		Height(maxHeight). // Use exactly 50% of viewport height
+		Render(overview)
+	
 	// Use minimal margins to maximize width usage
 	return lipgloss.NewStyle().Margin(0, 1).Render(
 		lipgloss.JoinVertical(
 			lipgloss.Left,
 			title,
 			"",
-			overview,
+			constrainedOverview,
 			"",
 			betHistory,
 		),
@@ -722,12 +746,28 @@ func (s *State) renderBettingOverview() string {
 func (s *State) renderPerformanceOverview() string {
 	perf := s.bettingPerformance
 
-	// Calculate card width based on terminal width
-	// Leave room for 4 cards + 3 spacers (2 chars each) = 6 chars for spacing
-	cardWidth := 18 // Further reduce width to ensure cards fit in narrow terminals
+	// Calculate card width to fill the full viewport width
+	// Use actual terminal width for dynamic sizing
+	terminalWidth := s.terminalWidth
+	if terminalWidth == 0 {
+		terminalWidth = 120 // Fallback if not set yet
+	}
+	
+	// Account for: margins (4 chars) + 3 spacers between cards (2 chars each = 6 total)
+	// Formula: (terminalWidth - margins - spacers) / 4 cards
+	margins := 4 // Left + right margins from lipgloss
+	spacers := 6 // 3 spacers of 2 chars each between 4 cards
+	cardWidth := (terminalWidth - margins - spacers) / 4
+	
+	// Ensure reasonable width bounds
+	if cardWidth < 18 {
+		cardWidth = 18 // Minimum for readability
+	} else if cardWidth > 30 {
+		cardWidth = 30 // Maximum to prevent overly wide cards
+	}
 
 	// Create the overview cards in a 4x2 grid
-	card1 := s.createStatsCardWithWidth("Total Bets", fmt.Sprintf("%d", perf.totalBets), fmt.Sprintf("DEBUG: %d", perf.totalBets), cardWidth)
+	card1 := s.createStatsCardWithWidth("Total Bets", fmt.Sprintf("%d", perf.totalBets), "", cardWidth)
 	card2 := s.createStatsCardWithWidth("Total Wagered", fmt.Sprintf("$%.2f", perf.totalWagered), "Amount bet", cardWidth)
 	card3 := s.createStatsCardWithWidth("Net Profit", fmt.Sprintf("$%.2f", perf.netProfit), "Profit", cardWidth)
 	card4 := s.createStatsCardWithWidth("ROI", fmt.Sprintf("%.1f%%", perf.roi), "Return on investment", cardWidth)
@@ -740,29 +780,14 @@ func (s *State) renderPerformanceOverview() string {
 	row1 := lipgloss.JoinHorizontal(lipgloss.Top, card1, "  ", card2, "  ", card3, "  ", card4)
 	row2 := lipgloss.JoinHorizontal(lipgloss.Top, card5, "  ", card6, "  ", card7, "  ", card8)
 
-	// Debug: Let's see what's in row1 vs row2
-	debugRow1 := "ROW1: " + strings.ReplaceAll(row1, "\n", " | ")
-	debugRow2 := "ROW2: " + strings.ReplaceAll(row2, "\n", " | ")
-
-	overviewContent := lipgloss.JoinVertical(
+	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		lipgloss.NewStyle().Bold(true).Render("Overview"),
 		"",
-		debugRow1, // Show debug info for row 1
-		"",
 		row1,
-		"",
-		debugRow2, // Show debug info for row 2
 		"",
 		row2,
 	)
-
-	// Debug: add a visible border to see if overview is rendered
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Padding(1).
-		Render(overviewContent)
 }
 
 func (s *State) createStatsCard(title, value, subtitle string) string {
