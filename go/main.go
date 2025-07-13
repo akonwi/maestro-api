@@ -130,17 +130,6 @@ type HeadToHeadStats struct {
 	awayGamesPlayed        int
 }
 
-type BettingPerformance struct {
-	totalBets     int
-	totalWagered  float64
-	netProfit     float64
-	roi           float64
-	winRate       float64
-	totalWinnings float64
-	totalLosses   float64
-	pendingBets   int
-}
-
 type KeyMap struct {
 	Back        key.Binding
 	GameStatus  key.Binding

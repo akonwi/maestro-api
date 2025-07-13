@@ -41,7 +41,7 @@ func (b Bet) Description() string {
 	oddsStr := fmt.Sprintf("%+d", b.odds)
 	amountStr := fmt.Sprintf("$%.2f", b.amount)
 	resultStr := string(b.result)
-	
+
 	return fmt.Sprintf("Line: %s | Odds: %s | Wager: %s | Result: %s", lineStr, oddsStr, amountStr, resultStr)
 }
 
@@ -117,6 +117,17 @@ type TableBetResultUpdated struct {
 
 type BetDeleted struct {
 	betID int
+}
+
+type BettingPerformance struct {
+	totalBets     int
+	totalWagered  float64
+	netProfit     float64
+	roi           float64
+	winRate       float64
+	totalWinnings float64
+	totalLosses   float64
+	pendingBets   int
 }
 
 type AllBetsLoaded []Bet
@@ -197,8 +208,8 @@ func loadAllBets() tea.Cmd {
 		var bets []Bet
 		for rows.Next() {
 			var bet Bet
-			err := rows.Scan(&bet.id, &bet.name, &bet.line, &bet.amount, &bet.odds, &bet.result, 
-							&bet.matchID, &bet.matchDate, &bet.homeTeamName, &bet.awayTeamName)
+			err := rows.Scan(&bet.id, &bet.name, &bet.line, &bet.amount, &bet.odds, &bet.result,
+				&bet.matchID, &bet.matchDate, &bet.homeTeamName, &bet.awayTeamName)
 			if err != nil {
 				return ErrMsg{err: fmt.Errorf("failed to scan bet: %v", err)}
 			}
@@ -212,49 +223,49 @@ func loadAllBets() tea.Cmd {
 func loadBettingPerformance() tea.Cmd {
 	return func() tea.Msg {
 		var perf BettingPerformance
-		
+
 		// Get total bets count
 		err := db.QueryRow("SELECT COUNT(*) FROM bets").Scan(&perf.totalBets)
 		if err != nil {
 			return ErrMsg{err: fmt.Errorf("failed to get total bets: %v", err)}
 		}
-		
+
 		// Get total wagered
 		err = db.QueryRow("SELECT COALESCE(SUM(amount), 0) FROM bets").Scan(&perf.totalWagered)
 		if err != nil {
 			return ErrMsg{err: fmt.Errorf("failed to get total wagered: %v", err)}
 		}
-		
+
 		// Get win/loss stats
 		var wins, losses int
 		err = db.QueryRow("SELECT COUNT(*) FROM bets WHERE result = 'win'").Scan(&wins)
 		if err != nil {
 			return ErrMsg{err: fmt.Errorf("failed to get wins: %v", err)}
 		}
-		
+
 		err = db.QueryRow("SELECT COUNT(*) FROM bets WHERE result = 'lose'").Scan(&losses)
 		if err != nil {
 			return ErrMsg{err: fmt.Errorf("failed to get losses: %v", err)}
 		}
-		
+
 		err = db.QueryRow("SELECT COUNT(*) FROM bets WHERE result = 'pending'").Scan(&perf.pendingBets)
 		if err != nil {
 			return ErrMsg{err: fmt.Errorf("failed to get pending bets: %v", err)}
 		}
-		
+
 		// Calculate win rate
 		settledBets := wins + losses
 		if settledBets > 0 {
 			perf.winRate = float64(wins) / float64(settledBets) * 100
 		}
-		
+
 		// Calculate total winnings (need to compute actual payouts based on odds)
 		winningBetsRows, err := db.Query("SELECT amount, odds FROM bets WHERE result = 'win'")
 		if err != nil {
 			return ErrMsg{err: fmt.Errorf("failed to get winning bets: %v", err)}
 		}
 		defer winningBetsRows.Close()
-		
+
 		var totalPayouts float64
 		for winningBetsRows.Next() {
 			var amount float64
@@ -263,7 +274,7 @@ func loadBettingPerformance() tea.Cmd {
 			if err != nil {
 				return ErrMsg{err: fmt.Errorf("failed to scan winning bet: %v", err)}
 			}
-			
+
 			// Calculate payout based on odds
 			var payout float64
 			if odds > 0 {
@@ -276,19 +287,19 @@ func loadBettingPerformance() tea.Cmd {
 			totalPayouts += payout
 		}
 		perf.totalWinnings = totalPayouts
-		
+
 		// Get total losses (losing bets amount)
 		err = db.QueryRow("SELECT COALESCE(SUM(amount), 0) FROM bets WHERE result = 'lose'").Scan(&perf.totalLosses)
 		if err != nil {
 			return ErrMsg{err: fmt.Errorf("failed to get total losses: %v", err)}
 		}
-		
+
 		// Calculate net profit and ROI
 		perf.netProfit = perf.totalWinnings - perf.totalLosses
 		if perf.totalWagered > 0 {
 			perf.roi = (perf.netProfit / perf.totalWagered) * 100
 		}
-		
+
 		return BettingPerformanceLoaded(perf)
 	}
 }
