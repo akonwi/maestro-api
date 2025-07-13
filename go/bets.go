@@ -354,35 +354,7 @@ func (s *State) updateBetResult(result BetOutcome) tea.Cmd {
 	return updateBetResult(selectedBet.id, result)
 }
 
-func (s *State) updateTableBetResult(result BetOutcome) tea.Cmd {
-	if len(s.allBetsData) == 0 {
-		return nil
-	}
-	
-	selectedRow := s.betHistoryTable.Cursor()
-	if selectedRow >= len(s.allBetsData) {
-		return nil
-	}
-	
-	selectedBet := s.allBetsData[selectedRow]
-	return updateTableBetResult(selectedBet.id, result)
-}
-
-func (s *State) deleteTableBet() tea.Cmd {
-	if len(s.allBetsData) == 0 {
-		return nil
-	}
-	
-	selectedRow := s.betHistoryTable.Cursor()
-	if selectedRow >= len(s.allBetsData) {
-		return nil
-	}
-	
-	selectedBet := s.allBetsData[selectedRow]
-	s.betToDelete = &selectedBet
-	s.showDeleteConfirm = true
-	return nil
-}
+// updateTableBetResult and deleteTableBet are now handled by BetDash
 
 /*
  * -------------
