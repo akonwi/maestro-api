@@ -20,20 +20,29 @@ const (
 )
 
 type Bet struct {
-	id      int
-	matchID int
-	name    string
-	line    float64
-	amount  float64
-	odds    int
-	result  BetOutcome
+	id           int
+	matchID      int
+	name         string
+	line         float64
+	amount       float64
+	odds         int
+	result       BetOutcome
+	matchDate    string
+	homeTeamName string
+	awayTeamName string
 }
 
 // Implement list.Item interface for Bet
 func (b Bet) FilterValue() string { return b.name }
 func (b Bet) Title() string       { return b.name }
 func (b Bet) Description() string {
-	return fmt.Sprintf("%s : %d : %v", strconv.FormatFloat(b.line, 'f', 2, 64), b.odds, b.result)
+	// Format for table-like display: Line | Odds | Amount | Result
+	lineStr := fmt.Sprintf("%.1f", b.line)
+	oddsStr := fmt.Sprintf("%+d", b.odds)
+	amountStr := fmt.Sprintf("$%.2f", b.amount)
+	resultStr := string(b.result)
+	
+	return fmt.Sprintf("Line: %s | Odds: %s | Wager: %s | Result: %s", lineStr, oddsStr, amountStr, resultStr)
 }
 
 type BetForm struct {
@@ -101,9 +110,17 @@ type BetResultUpdated struct {
 	result BetOutcome
 }
 
+type TableBetResultUpdated struct {
+	betID  int
+	result BetOutcome
+}
+
 type BetDeleted struct {
 	betID int
 }
+
+type AllBetsLoaded []Bet
+type BettingPerformanceLoaded BettingPerformance
 
 func loadBets(matchID int) tea.Cmd {
 	return func() tea.Msg {
@@ -139,6 +156,17 @@ func updateBetResult(betID int, result BetOutcome) tea.Cmd {
 	}
 }
 
+func updateTableBetResult(betID int, result BetOutcome) tea.Cmd {
+	return func() tea.Msg {
+		_, err := db.Exec("UPDATE bets SET result = ? WHERE id = ?", result, betID)
+		if err != nil {
+			return ErrMsg{err: fmt.Errorf("failed to update bet result: %v", err)}
+		}
+
+		return TableBetResultUpdated{betID: betID, result: result}
+	}
+}
+
 func deleteBet(betID int) tea.Cmd {
 	return func() tea.Msg {
 		_, err := db.Exec("DELETE FROM bets WHERE id = ?", betID)
@@ -147,6 +175,121 @@ func deleteBet(betID int) tea.Cmd {
 		}
 
 		return BetDeleted{betID: betID}
+	}
+}
+
+func loadAllBets() tea.Cmd {
+	return func() tea.Msg {
+		rows, err := db.Query(`
+			SELECT b.id, b.name, b.line, b.amount, b.odds, b.result, b.match_id,
+			       m.date, ht.name as home_team_name, at.name as away_team_name
+			FROM bets b
+			JOIN matches m ON b.match_id = m.id
+			JOIN teams ht ON m.home_team_id = ht.id
+			JOIN teams at ON m.away_team_id = at.id
+			ORDER BY b.id DESC
+		`)
+		if err != nil {
+			return ErrMsg{err: fmt.Errorf("failed to load all bets: %v", err)}
+		}
+		defer rows.Close()
+
+		var bets []Bet
+		for rows.Next() {
+			var bet Bet
+			err := rows.Scan(&bet.id, &bet.name, &bet.line, &bet.amount, &bet.odds, &bet.result, 
+							&bet.matchID, &bet.matchDate, &bet.homeTeamName, &bet.awayTeamName)
+			if err != nil {
+				return ErrMsg{err: fmt.Errorf("failed to scan bet: %v", err)}
+			}
+			bets = append(bets, bet)
+		}
+
+		return AllBetsLoaded(bets)
+	}
+}
+
+func loadBettingPerformance() tea.Cmd {
+	return func() tea.Msg {
+		var perf BettingPerformance
+		
+		// Get total bets count
+		err := db.QueryRow("SELECT COUNT(*) FROM bets").Scan(&perf.totalBets)
+		if err != nil {
+			return ErrMsg{err: fmt.Errorf("failed to get total bets: %v", err)}
+		}
+		
+		// Get total wagered
+		err = db.QueryRow("SELECT COALESCE(SUM(amount), 0) FROM bets").Scan(&perf.totalWagered)
+		if err != nil {
+			return ErrMsg{err: fmt.Errorf("failed to get total wagered: %v", err)}
+		}
+		
+		// Get win/loss stats
+		var wins, losses int
+		err = db.QueryRow("SELECT COUNT(*) FROM bets WHERE result = 'win'").Scan(&wins)
+		if err != nil {
+			return ErrMsg{err: fmt.Errorf("failed to get wins: %v", err)}
+		}
+		
+		err = db.QueryRow("SELECT COUNT(*) FROM bets WHERE result = 'lose'").Scan(&losses)
+		if err != nil {
+			return ErrMsg{err: fmt.Errorf("failed to get losses: %v", err)}
+		}
+		
+		err = db.QueryRow("SELECT COUNT(*) FROM bets WHERE result = 'pending'").Scan(&perf.pendingBets)
+		if err != nil {
+			return ErrMsg{err: fmt.Errorf("failed to get pending bets: %v", err)}
+		}
+		
+		// Calculate win rate
+		settledBets := wins + losses
+		if settledBets > 0 {
+			perf.winRate = float64(wins) / float64(settledBets) * 100
+		}
+		
+		// Calculate total winnings (need to compute actual payouts based on odds)
+		winningBetsRows, err := db.Query("SELECT amount, odds FROM bets WHERE result = 'win'")
+		if err != nil {
+			return ErrMsg{err: fmt.Errorf("failed to get winning bets: %v", err)}
+		}
+		defer winningBetsRows.Close()
+		
+		var totalPayouts float64
+		for winningBetsRows.Next() {
+			var amount float64
+			var odds int
+			err := winningBetsRows.Scan(&amount, &odds)
+			if err != nil {
+				return ErrMsg{err: fmt.Errorf("failed to scan winning bet: %v", err)}
+			}
+			
+			// Calculate payout based on odds
+			var payout float64
+			if odds > 0 {
+				// Positive odds: +150 means bet $100 to win $150
+				payout = amount + (amount * float64(odds) / 100.0)
+			} else {
+				// Negative odds: -150 means bet $150 to win $100
+				payout = amount + (amount * 100.0 / float64(-odds))
+			}
+			totalPayouts += payout
+		}
+		perf.totalWinnings = totalPayouts
+		
+		// Get total losses (losing bets amount)
+		err = db.QueryRow("SELECT COALESCE(SUM(amount), 0) FROM bets WHERE result = 'lose'").Scan(&perf.totalLosses)
+		if err != nil {
+			return ErrMsg{err: fmt.Errorf("failed to get total losses: %v", err)}
+		}
+		
+		// Calculate net profit and ROI
+		perf.netProfit = perf.totalWinnings - perf.totalLosses
+		if perf.totalWagered > 0 {
+			perf.roi = (perf.netProfit / perf.totalWagered) * 100
+		}
+		
+		return BettingPerformanceLoaded(perf)
 	}
 }
 
@@ -209,6 +352,36 @@ func (s *State) updateBetResult(result BetOutcome) tea.Cmd {
 
 	selectedBet := s.currentMatchBets.SelectedItem().(Bet)
 	return updateBetResult(selectedBet.id, result)
+}
+
+func (s *State) updateTableBetResult(result BetOutcome) tea.Cmd {
+	if len(s.allBetsData) == 0 {
+		return nil
+	}
+	
+	selectedRow := s.betHistoryTable.Cursor()
+	if selectedRow >= len(s.allBetsData) {
+		return nil
+	}
+	
+	selectedBet := s.allBetsData[selectedRow]
+	return updateTableBetResult(selectedBet.id, result)
+}
+
+func (s *State) deleteTableBet() tea.Cmd {
+	if len(s.allBetsData) == 0 {
+		return nil
+	}
+	
+	selectedRow := s.betHistoryTable.Cursor()
+	if selectedRow >= len(s.allBetsData) {
+		return nil
+	}
+	
+	selectedBet := s.allBetsData[selectedRow]
+	s.betToDelete = &selectedBet
+	s.showDeleteConfirm = true
+	return nil
 }
 
 /*
