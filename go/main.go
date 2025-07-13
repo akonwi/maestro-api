@@ -407,7 +407,7 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.betDash.SetSize(msg.Width-w, msg.Height-h)
 	case DBConnected:
 		s.db = msg
-		return s, tea.Batch(getLeagues, loadAllBets(), loadBettingPerformance())
+		return s, tea.Batch(getLeagues, s.betDash.Init())
 	case LeaguesLoaded:
 		items := make([]list.Item, len(msg))
 		for i, league := range msg {

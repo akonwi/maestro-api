@@ -60,7 +60,7 @@ func NewBetDash() BetDash {
 
 // Init implements tea.Model
 func (bd BetDash) Init() tea.Cmd {
-	return nil
+	return tea.Batch(loadAllBets(), loadBettingPerformance())
 }
 
 // Update implements tea.Model  
