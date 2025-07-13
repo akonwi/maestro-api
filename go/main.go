@@ -131,14 +131,14 @@ type HeadToHeadStats struct {
 }
 
 type BettingPerformance struct {
-	totalBets      int
-	totalWagered   float64
-	netProfit      float64
-	roi            float64
-	winRate        float64
-	totalWinnings  float64
-	totalLosses    float64
-	pendingBets    int
+	totalBets     int
+	totalWagered  float64
+	netProfit     float64
+	roi           float64
+	winRate       float64
+	totalWinnings float64
+	totalLosses   float64
+	pendingBets   int
 }
 
 type KeyMap struct {
@@ -208,11 +208,11 @@ type State struct {
 	betsFocused       bool
 	showDeleteConfirm bool
 	betToDelete       *Bet
-	
+
 	/* Betting Overview Screen */
 	bettingPerformance BettingPerformance
-	betHistoryTable   table.Model
-	allBetsData       []Bet // Store bet data for table operations
+	betHistoryTable    table.Model
+	allBetsData        []Bet // Store bet data for table operations
 }
 
 func newState() *State {
@@ -226,7 +226,7 @@ func newState() *State {
 
 	state.leagues = list.New([]list.Item{}, listDelegate, 0, 0)
 	state.leagues.Title = "Leagues"
-	
+
 	// Add help key bindings for leagues list
 	state.leagues.AdditionalShortHelpKeys = func() []key.Binding {
 		return []key.Binding{defaultKeyMap.BetOverview}
@@ -252,14 +252,14 @@ func newState() *State {
 		{Title: "Result", Width: 10},
 		{Title: "P&L", Width: 10},
 	}
-	
+
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows([]table.Row{}),
 		table.WithFocused(true),
 		table.WithHeight(20), // Will be dynamically sized in window resize
 	)
-	
+
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
@@ -271,7 +271,7 @@ func newState() *State {
 		Background(lipgloss.Color("57")).
 		Bold(false)
 	t.SetStyles(s)
-	
+
 	state.betHistoryTable = t
 
 	// Add help key bindings for matches list
@@ -378,7 +378,7 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-			
+
 			// Handle bet result updates when in betting overview table
 			if s.currentView == ViewBettingOverview {
 				switch msg.String() {
@@ -463,7 +463,7 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		s.leagues.SetSize(msg.Width-w, msg.Height-h)
 		s.matches.SetSize(msg.Width-w, msg.Height-h)
 		s.currentMatchBets.SetSize((msg.Width-w)/2, (msg.Height-h)/2)
-		
+
 		// Size table for betting overview - calculate available height
 		// Account for: title, overview cards, spacing, help text
 		availableHeight := msg.Height - h
@@ -473,8 +473,8 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if tableHeight < 5 {
 			tableHeight = 5 // Minimum table height
 		}
-		
-		s.betHistoryTable.SetWidth(msg.Width-w)
+
+		s.betHistoryTable.SetWidth(msg.Width - w)
 		s.betHistoryTable.SetHeight(tableHeight)
 	case DBConnected:
 		s.db = msg
@@ -702,10 +702,10 @@ func (s *State) renderStatsWithBetForm() string {
 
 func (s *State) renderBettingOverview() string {
 	title := lipgloss.NewStyle().Bold(true).Render("Betting Performance")
-	
+
 	overview := s.renderPerformanceOverview()
 	betHistory := s.renderBetHistoryTable()
-	
+
 	// Use minimal margins to maximize width usage
 	return lipgloss.NewStyle().Margin(0, 1).Render(
 		lipgloss.JoinVertical(
@@ -721,29 +721,29 @@ func (s *State) renderBettingOverview() string {
 
 func (s *State) renderPerformanceOverview() string {
 	perf := s.bettingPerformance
-	
+
 	// Calculate card width based on terminal width
 	// Leave room for 4 cards + 3 spacers (2 chars each) = 6 chars for spacing
-	cardWidth := 18  // Further reduce width to ensure cards fit in narrow terminals
-	
+	cardWidth := 18 // Further reduce width to ensure cards fit in narrow terminals
+
 	// Create the overview cards in a 4x2 grid
 	card1 := s.createStatsCardWithWidth("Total Bets", fmt.Sprintf("%d", perf.totalBets), fmt.Sprintf("DEBUG: %d", perf.totalBets), cardWidth)
 	card2 := s.createStatsCardWithWidth("Total Wagered", fmt.Sprintf("$%.2f", perf.totalWagered), "Amount bet", cardWidth)
 	card3 := s.createStatsCardWithWidth("Net Profit", fmt.Sprintf("$%.2f", perf.netProfit), "Profit", cardWidth)
 	card4 := s.createStatsCardWithWidth("ROI", fmt.Sprintf("%.1f%%", perf.roi), "Return on investment", cardWidth)
-	
+
 	card5 := s.createStatsCardWithWidth("Win Rate", fmt.Sprintf("%.1f%%", perf.winRate), fmt.Sprintf("%d settled bets", perf.totalBets-perf.pendingBets), cardWidth)
 	card6 := s.createStatsCardWithWidth("Total Winnings", fmt.Sprintf("$%.2f", perf.totalWinnings), "Gross winnings", cardWidth)
 	card7 := s.createStatsCardWithWidth("Total Losses", fmt.Sprintf("$%.2f", perf.totalLosses), "Amount lost", cardWidth)
 	card8 := s.createStatsCardWithWidth("Pending Bets", fmt.Sprintf("%d", perf.pendingBets), "Awaiting results", cardWidth)
-	
+
 	row1 := lipgloss.JoinHorizontal(lipgloss.Top, card1, "  ", card2, "  ", card3, "  ", card4)
 	row2 := lipgloss.JoinHorizontal(lipgloss.Top, card5, "  ", card6, "  ", card7, "  ", card8)
-	
+
 	// Debug: Let's see what's in row1 vs row2
 	debugRow1 := "ROW1: " + strings.ReplaceAll(row1, "\n", " | ")
 	debugRow2 := "ROW2: " + strings.ReplaceAll(row2, "\n", " | ")
-	
+
 	overviewContent := lipgloss.JoinVertical(
 		lipgloss.Left,
 		lipgloss.NewStyle().Bold(true).Render("Overview"),
@@ -752,11 +752,11 @@ func (s *State) renderPerformanceOverview() string {
 		"",
 		row1,
 		"",
-		debugRow2, // Show debug info for row 2  
+		debugRow2, // Show debug info for row 2
 		"",
 		row2,
 	)
-	
+
 	// Debug: add a visible border to see if overview is rendered
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -769,13 +769,13 @@ func (s *State) createStatsCard(title, value, subtitle string) string {
 	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
 	subtitleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true)
-	
+
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		titleStyle.Render(title),
 		valueStyle.Render(value),
 	)
-	
+
 	if subtitle != "" {
 		content = lipgloss.JoinVertical(
 			lipgloss.Left,
@@ -783,7 +783,7 @@ func (s *State) createStatsCard(title, value, subtitle string) string {
 			subtitleStyle.Render(subtitle),
 		)
 	}
-	
+
 	// Use flexible width instead of fixed 20
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -797,13 +797,13 @@ func (s *State) createStatsCardWithWidth(title, value, subtitle string, width in
 	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
 	subtitleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true)
-	
+
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		titleStyle.Render(title),
 		valueStyle.Render(value),
 	)
-	
+
 	if subtitle != "" {
 		content = lipgloss.JoinVertical(
 			lipgloss.Left,
@@ -811,7 +811,7 @@ func (s *State) createStatsCardWithWidth(title, value, subtitle string, width in
 			subtitleStyle.Render(subtitle),
 		)
 	}
-	
+
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("240")).
@@ -823,7 +823,7 @@ func (s *State) createStatsCardWithWidth(title, value, subtitle string, width in
 
 func (s *State) renderBetHistoryTable() string {
 	title := lipgloss.NewStyle().Bold(true).Render("Recent Activity")
-	
+
 	if s.showDeleteConfirm {
 		return lipgloss.JoinVertical(
 			lipgloss.Left,
@@ -832,9 +832,9 @@ func (s *State) renderBetHistoryTable() string {
 			s.renderDeleteConfirmation(),
 		)
 	}
-	
+
 	helpText := s.renderBettingOverviewHelp()
-	
+
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		title,
@@ -847,7 +847,7 @@ func (s *State) renderBetHistoryTable() string {
 
 func (s *State) createTableRowsFromBets(bets []Bet) []table.Row {
 	rows := make([]table.Row, len(bets))
-	
+
 	for i, bet := range bets {
 		// Calculate P&L
 		var pnl string
@@ -863,30 +863,30 @@ func (s *State) createTableRowsFromBets(bets []Bet) []table.Row {
 		} else {
 			pnl = "-"
 		}
-		
+
 		// Format odds
 		oddsStr := fmt.Sprintf("%+d", bet.odds)
-		
+
 		// Format result with color coding
 		resultStr := string(bet.result)
-		
+
 		// Format match date
 		date := s.formatBetDate(bet.matchDate)
-		
+
 		// Format match name
 		matchName := fmt.Sprintf("%s vs %s", bet.homeTeamName, bet.awayTeamName)
-		
+
 		rows[i] = table.Row{
-			date,                              // Date
-			matchName,                         // Match  
-			bet.name,                          // Bet name
+			date,                             // Date
+			matchName,                        // Match
+			bet.name,                         // Bet name
 			oddsStr,                          // Odds
 			fmt.Sprintf("$%.2f", bet.amount), // Wager
 			resultStr,                        // Result
 			pnl,                              // P&L
 		}
 	}
-	
+
 	return rows
 }
 
@@ -911,23 +911,23 @@ func (s *State) formatBetDate(dateStr string) string {
 			return dateStr
 		}
 	}
-	
+
 	// Format as M/D/YYYY
 	return t.Format("1/2/2006")
 }
 
 func (s *State) renderBettingOverviewHelp() string {
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	
+
 	helpItems := []string{
 		"↑/↓: navigate",
-		"w: mark win", 
+		"w: mark win",
 		"l: mark lose",
 		"p: mark push",
 		"⌫: delete bet",
 		"esc: back to leagues",
 	}
-	
+
 	return helpStyle.Render("• " + strings.Join(helpItems, " • "))
 }
 
