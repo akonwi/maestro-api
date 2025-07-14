@@ -198,7 +198,7 @@ func loadAllBets() tea.Cmd {
 			JOIN matches m ON b.match_id = m.id
 			JOIN teams ht ON m.home_team_id = ht.id
 			JOIN teams at ON m.away_team_id = at.id
-			ORDER BY b.id DESC
+			ORDER BY m.date DESC
 		`)
 		if err != nil {
 			return ErrMsg{err: fmt.Errorf("failed to load all bets: %v", err)}
