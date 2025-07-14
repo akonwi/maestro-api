@@ -76,21 +76,26 @@ func (m Match) score() string {
 	return fmt.Sprintf("%d - %d (%s)", m.homeGoals, m.awayGoals, m.status)
 }
 
-func (m Match) formatDate() string {
+// formatDate is a standalone function that formats date strings to M/D/YYYY format
+func formatDate(dateStr string) string {
 	// Handle full timestamp format like "2025-07-12T23:30:00+00:00"
 	// First try to parse as full timestamp
-	t, err := time.Parse(time.RFC3339, m.date)
+	t, err := time.Parse(time.RFC3339, dateStr)
 	if err != nil {
 		// If that fails, try just the date part
-		t, err = time.Parse("2006-01-02", m.date)
+		t, err = time.Parse("2006-01-02", dateStr)
 		if err != nil {
 			// If parsing fails, return the original date
-			return m.date
+			return dateStr
 		}
 	}
 
 	// Format as M/D/YYYY
 	return t.Format("01/02/2006")
+}
+
+func (m Match) formatDate() string {
+	return formatDate(m.date)
 }
 
 // Implement list.Item interface for League
@@ -699,7 +704,7 @@ func (s *State) createTableRowsFromBets(bets []Bet) []table.Row {
 		resultStr := string(bet.result)
 
 		// Format match date
-		date := s.formatBetDate(bet.matchDate)
+		date := formatDate(bet.matchDate)
 
 		// Format match name
 		matchName := fmt.Sprintf("%s vs %s", bet.homeTeamName, bet.awayTeamName)
@@ -728,21 +733,6 @@ func (s *State) calculateWinnings(amount float64, odds int) float64 {
 	}
 }
 
-func (s *State) formatBetDate(dateStr string) string {
-	// Parse the date string (handle full timestamp)
-	t, err := time.Parse(time.RFC3339, dateStr)
-	if err != nil {
-		// If that fails, try just the date part
-		t, err = time.Parse("2006-01-02", dateStr)
-		if err != nil {
-			// If parsing fails, return the original date
-			return dateStr
-		}
-	}
-
-	// Format as M/D/YYYY
-	return t.Format("1/2/2006")
-}
 
 func (s *State) renderBettingOverviewHelp() string {
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))

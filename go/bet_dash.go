@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
@@ -33,14 +32,14 @@ func NewBetDash() BetDash {
 		{Title: "Result", Width: 10},
 		{Title: "P&L", Width: 10},
 	}
-	
+
 	t := table.New(
 		table.WithColumns(columns),
 		table.WithRows([]table.Row{}),
 		table.WithFocused(true),
 		table.WithHeight(20), // Will be dynamically sized in window resize
 	)
-	
+
 	s := table.DefaultStyles()
 	s.Header = s.Header.
 		BorderStyle(lipgloss.NormalBorder()).
@@ -52,7 +51,7 @@ func NewBetDash() BetDash {
 		Background(lipgloss.Color("57")).
 		Bold(false)
 	t.SetStyles(s)
-	
+
 	return BetDash{
 		betHistoryTable: t,
 	}
@@ -63,10 +62,10 @@ func (bd BetDash) Init() tea.Cmd {
 	return tea.Batch(loadAllBets(), loadBettingPerformance())
 }
 
-// Update implements tea.Model  
+// Update implements tea.Model
 func (bd BetDash) Update(msg tea.Msg) (BetDash, tea.Cmd) {
 	var cmd tea.Cmd
-	
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		// Handle delete confirmation
@@ -87,7 +86,7 @@ func (bd BetDash) Update(msg tea.Msg) (BetDash, tea.Cmd) {
 			}
 			return bd, nil
 		}
-		
+
 		// Handle bet result updates
 		switch msg.String() {
 		case "w":
@@ -100,7 +99,7 @@ func (bd BetDash) Update(msg tea.Msg) (BetDash, tea.Cmd) {
 			return bd, bd.deleteBet()
 		}
 	}
-	
+
 	// Update table
 	bd.betHistoryTable, cmd = bd.betHistoryTable.Update(msg)
 	return bd, cmd
@@ -109,20 +108,20 @@ func (bd BetDash) Update(msg tea.Msg) (BetDash, tea.Cmd) {
 // View implements tea.Model
 func (bd BetDash) View() string {
 	title := lipgloss.NewStyle().Bold(true).Render("Betting Performance")
-	
+
 	overview := bd.renderPerformanceOverview()
 	betHistory := bd.renderBetHistoryTable()
-	
+
 	// Constrain overview section to exactly 50% of viewport
 	maxHeight := bd.overviewMaxHeight
 	if maxHeight == 0 {
 		maxHeight = 8 // Fallback if not set yet
 	}
-	
+
 	constrainedOverview := lipgloss.NewStyle().
 		Height(maxHeight). // Use exactly 50% of viewport height
 		Render(overview)
-	
+
 	// Use minimal margins to maximize width usage
 	return lipgloss.NewStyle().Margin(0, 1).Render(
 		lipgloss.JoinVertical(
@@ -140,17 +139,17 @@ func (bd BetDash) View() string {
 func (bd *BetDash) SetSize(width, height int) {
 	// Split available height evenly between overview and table sections
 	sectionHeight := height / 2
-	
+
 	// Overview section gets 50% of viewport
 	bd.overviewMaxHeight = sectionHeight
-	
+
 	// Table section gets 50% of viewport (minus small space for help text)
 	helpHeight := 1 // Just one line for help
 	tableHeight := sectionHeight - helpHeight
 	if tableHeight < 3 {
 		tableHeight = 3 // Minimum table height
 	}
-	
+
 	bd.betHistoryTable.SetWidth(width)
 	bd.betHistoryTable.SetHeight(tableHeight)
 	bd.tableMaxHeight = tableHeight
@@ -170,12 +169,12 @@ func (bd BetDash) updateBetResult(result BetOutcome) tea.Cmd {
 	if len(bd.allBetsData) == 0 {
 		return nil
 	}
-	
+
 	selectedRow := bd.betHistoryTable.Cursor()
 	if selectedRow >= len(bd.allBetsData) {
 		return nil
 	}
-	
+
 	selectedBet := bd.allBetsData[selectedRow]
 	return updateTableBetResult(selectedBet.id, result)
 }
@@ -185,12 +184,12 @@ func (bd *BetDash) deleteBet() tea.Cmd {
 	if len(bd.allBetsData) == 0 {
 		return nil
 	}
-	
+
 	selectedRow := bd.betHistoryTable.Cursor()
 	if selectedRow >= len(bd.allBetsData) {
 		return nil
 	}
-	
+
 	selectedBet := bd.allBetsData[selectedRow]
 	bd.betToDelete = &selectedBet
 	bd.showDeleteConfirm = true
@@ -272,13 +271,13 @@ func (bd BetDash) createStatsCardWithWidth(title, value, subtitle string, width 
 	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
 	subtitleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true)
-	
+
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		titleStyle.Render(title),
 		valueStyle.Render(value),
 	)
-	
+
 	if subtitle != "" {
 		content = lipgloss.JoinVertical(
 			lipgloss.Left,
@@ -286,7 +285,7 @@ func (bd BetDash) createStatsCardWithWidth(title, value, subtitle string, width 
 			subtitleStyle.Render(subtitle),
 		)
 	}
-	
+
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("240")).
@@ -298,7 +297,7 @@ func (bd BetDash) createStatsCardWithWidth(title, value, subtitle string, width 
 
 func (bd BetDash) createTableRowsFromBets(bets []Bet) []table.Row {
 	rows := make([]table.Row, len(bets))
-	
+
 	for i, bet := range bets {
 		// Calculate P&L
 		var pnl string
@@ -314,30 +313,30 @@ func (bd BetDash) createTableRowsFromBets(bets []Bet) []table.Row {
 		} else {
 			pnl = "-"
 		}
-		
+
 		// Format odds
 		oddsStr := fmt.Sprintf("%+d", bet.odds)
-		
+
 		// Format result with color coding
 		resultStr := string(bet.result)
-		
+
 		// Format match date
-		date := bd.formatBetDate(bet.matchDate)
-		
+		date := formatDate(bet.matchDate)
+
 		// Format match name
 		matchName := fmt.Sprintf("%s vs %s", bet.homeTeamName, bet.awayTeamName)
-		
+
 		rows[i] = table.Row{
-			date,                              // Date
-			matchName,                         // Match  
-			bet.name,                          // Bet name
+			date,                             // Date
+			matchName,                        // Match
+			bet.name,                         // Bet name
 			oddsStr,                          // Odds
 			fmt.Sprintf("$%.2f", bet.amount), // Wager
 			resultStr,                        // Result
 			pnl,                              // P&L
 		}
 	}
-	
+
 	return rows
 }
 
@@ -351,34 +350,19 @@ func (bd BetDash) calculateWinnings(amount float64, odds int) float64 {
 	}
 }
 
-func (bd BetDash) formatBetDate(dateStr string) string {
-	// Parse the date string (handle full timestamp)
-	t, err := time.Parse(time.RFC3339, dateStr)
-	if err != nil {
-		// If that fails, try just the date part
-		t, err = time.Parse("2006-01-02", dateStr)
-		if err != nil {
-			// If parsing fails, return the original date
-			return dateStr
-		}
-	}
-	
-	// Format as M/D/YYYY
-	return t.Format("1/2/2006")
-}
 
 func (bd BetDash) renderBettingOverviewHelp() string {
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	
+
 	helpItems := []string{
 		"↑/↓: navigate",
-		"w: mark win", 
+		"w: mark win",
 		"l: mark lose",
 		"p: mark push",
 		"⌫: delete bet",
 		"esc: back to leagues",
 	}
-	
+
 	return helpStyle.Render("• " + strings.Join(helpItems, " • "))
 }
 
