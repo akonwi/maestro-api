@@ -78,7 +78,6 @@ fn init_db(db: sqlite::Database) {
 }
 
 fn fetch_fixture(id: Int) Match? {
-  io::print("fetching {id}")
   let req = http::Request{
     method: "GET",
     url: "https://v3.football.api-sports.io/fixtures?id={id}",
@@ -133,7 +132,7 @@ fn fetch_fixture(id: Int) Match? {
 
 fn update_match(db: sqlite::Database, m: Match) {
   match db.update("matches", "id={m.id}", m) {
-    ok => io::print("Updated match {m.id}"),
+    ok => {},
     err => io::print("Error updating match {m.id}: {err}"),
   }
 }
