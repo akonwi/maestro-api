@@ -1,3 +1,4 @@
+use ard/env
 use ard/http
 use ard/io
 use ard/maybe
@@ -43,13 +44,18 @@ private fn parse_teams(res: http::Response) [TeamEntryTeam] {
 }
 
 fn fetch(league_id: Int, season: Int) [Team] {
+  let api_key = match env::get("API_KEY") {
+    key => key,
+    _ => panic("API_KEY environment variable not set")
+  }
+
   mut result: [Team] = []
 
   let req = http::Request{
     method: "GET",
     url: "https://v3.football.api-sports.io/teams?league={league_id}&season={season}",
     headers: [
-      "x-rapidapi-key": "91be9b12c36d01fd71847355d020c8d7",
+      "x-rapidapi-key": api_key,
       "Accept": "application/json",
     ],
     body: maybe::none(),
