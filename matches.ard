@@ -78,6 +78,61 @@ fn init_db(db: sqlite::Database) {
   ).expect("Failed to create matches table")
 }
 
+fn fetch_season(league_id: Int, season: Int) [Match] {
+  let api_key = match env::get("API_KEY") {
+    key => key,
+    _ => panic("API_KEY environment variable not set")
+  }
+  let req = http::Request{
+    method: "GET",
+    url: "https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}",
+    headers: [
+      "x-rapidapi-key": api_key,
+      "Accept": "application/json",
+    ],
+    body: maybe::none(),
+  }
+
+  mut matches = List::new<Match>()
+
+  match http::send(req) {
+    err => io::print("Error fetching fixtures: {err}"),
+    ok(res) => {
+      let entries = match res.json<FixturesResponse>() {
+        err => {
+          io::print("Error parsing fixtures: {err}")
+          List::new<FixtureEntry>()
+        },
+        ok(data) => data.response
+      }
+
+      for entry in entries {
+        mut winner_id: Int? = maybe::none()
+        if entry.teams.home.winner.or(false) {
+          winner_id = maybe::some(entry.teams.home.id)
+        } else if entry.teams.away.winner.or(false) {
+          winner_id = maybe::some(entry.teams.away.id)
+        }
+
+        matches.push(Match{
+          id: entry.fixture.id,
+          date: entry.fixture.date,
+          timestamp: entry.fixture.timestamp,
+          league_id: league_id,
+          status: entry.fixture.status.short,
+          home_team_id: entry.teams.home.id,
+          away_team_id: entry.teams.away.id,
+          home_goals: entry.goals.home.or(0),
+          away_goals: entry.goals.away.or(0),
+          winner_id: winner_id,
+        })
+      }
+    }
+  }
+
+  matches
+}
+
 fn fetch_fixture(id: Int) Match? {
   let api_key = match env::get("API_KEY") {
     key => key,
@@ -142,94 +197,27 @@ fn update_match(db: sqlite::Database, m: Match) {
   }
 }
 
-fn update_fixtures(db: sqlite::Database) {
-  let pending_fixtures = db.get<Match>("matches", "status != 'FT'")
-  match pending_fixtures {
-    err => io::print("Error finding pending fixtures: {err}"),
-    ok(fixtures) => {
-      for f in fixtures {
-        match fetch_fixture(f.id) {
-          m => update_match(db, m),
-          _ => io::print("Fixture not found: {f.id}")
+// MLS
+let league_ids = [253]
+
+// update the matches in the db
+fn sync(db: sqlite::Database) {
+  for id in league_ids {
+    for m in fetch_season(id, 2025) {
+      let exists = db.exists("matches", "id = {m.id}").expect("Error checking for match in db")
+      if exists {
+        match db.update("matches", "id={m.id}", m) {
+          err => io::print("Error updating match({m.id}): {err}"),
+          ok => {},
+        }
+      } else {
+        match db.insert("matches", m) {
+          err => io::print("Error inserting match({m.id}): {err}"),
+          ok => {},
         }
       }
     }
+
+    io::print("Updated match data for league {id}")
   }
 }
-
-// fn fetch_season(league_id: Int, season: Int) [Match] {
-//   let req = http::Request{
-//     method: "GET",
-//     url: "https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}",
-//     headers: [
-//       "x-rapidapi-key": "91be9b12c36d01fd71847355d020c8d7",
-//       "Accept": "application/json",
-//     ],
-//     body: maybe::none(),
-//   }
-
-//   match http::send(req) {
-//     err => {
-//       io::print("Error fetching fixtures: {err}")
-//       List::new<Match>()
-//     },
-//     ok(res) => {
-//       let entries = match res.json<FixturesResponse>() {
-//         err => {
-//           io::print("Error parsing fixtures: {err}")
-//           List::new<FixtureEntry>()
-//         },
-//         ok(data) => data.response
-//       }
-
-//       mut result: [Match] = []
-
-//       for entry in entries {
-//         mut winner_id: Int? = maybe::none()
-//         if entry.teams.home.winner.or(false) {
-//           winner_id = maybe::some(entry.teams.home.id)
-//         } else if entry.teams.away.winner.or(false) {
-//           winner_id = maybe::some(entry.teams.away.id)
-//         }
-
-//         result.push(Match{
-//           id: entry.fixture.id,
-//           date: entry.fixture.date,
-//           timestamp: entry.fixture.timestamp,
-//           league_id: league_id,
-//           status: entry.fixture.status.short,
-//           home_team_id: entry.teams.home.id,
-//           away_team_id: entry.teams.away.id,
-//           home_goals: entry.goals.home.or(0),
-//           away_goals: entry.goals.away.or(0),
-//           winner_id: winner_id,
-//         })
-//       }
-
-//       result
-//     }
-//   }
-// }
-
-// // seed the db with completed matches in 2025
-// // todo: accept season parameter
-// fn seed_db(db: sqlite::Database, league_ids: [Int]) {
-//   for id in league_ids {
-//     for m in fetch_season(id, 2025) {
-//       let exists = db.exists("matches", "id = {m.id}").expect("Error checking for match in db")
-//       if (not exists) {
-//         match db.insert("matches", m) {
-//           err => io::print("Error inserting match({m.id}): {err}"),
-//           ok => {},
-//         }
-//       } else {
-//         match db.update("matches", "id={m.id}", m) {
-//           err => io::print("Error updating match({m.id}): {err}"),
-//           ok => {},
-//         }
-//       }
-//     }
-
-//     io::print("Updated matches")
-//   }
-// }
