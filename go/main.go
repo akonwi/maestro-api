@@ -111,30 +111,6 @@ const (
 	ViewBettingOverview
 )
 
-type HeadToHeadStats struct {
-	homeTeamName           string
-	awayTeamName           string
-	homeWins               int
-	awayWins               int
-	draws                  int
-	homeCleanSheets        int
-	awayCleanSheets        int
-	home1GoalConceded      int
-	away1GoalConceded      int
-	home2PlusGoalsConceded int
-	away2PlusGoalsConceded int
-	homeGoalsFor           int
-	homeGoalsAgainst       int
-	awayGoalsFor           int
-	awayGoalsAgainst       int
-	homeAvgGoalsFor        float64
-	homeAvgGoalsAgainst    float64
-	awayAvgGoalsFor        float64
-	awayAvgGoalsAgainst    float64
-	homeGamesPlayed        int
-	awayGamesPlayed        int
-}
-
 type KeyMap struct {
 	Back        key.Binding
 	GameStatus  key.Binding
@@ -329,10 +305,6 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch {
 			case key.Matches(msg, defaultKeyMap.Back):
 				if s.showBetForm {
-					// if s.betForm.isDirty() {
-					//   // s.resetForm()
-					// }
-
 					s.showBetForm = false
 					return s, nil
 				}
@@ -733,27 +705,11 @@ func (s *State) calculateWinnings(amount float64, odds int) float64 {
 	}
 }
 
-
-func (s *State) renderBettingOverviewHelp() string {
-	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-
-	helpItems := []string{
-		"↑/↓: navigate",
-		"w: mark win",
-		"l: mark lose",
-		"p: mark push",
-		"⌫: delete bet",
-		"esc: back to leagues",
-	}
-
-	return helpStyle.Render("• " + strings.Join(helpItems, " • "))
-}
-
 func (s *State) renderHeadToHeadStats() string {
 	stats := s.headToHeadStats
 
 	// Header with team names
-	header := fmt.Sprintf("%s VS %s", stats.homeTeamName, stats.awayTeamName)
+	header := fmt.Sprintf("%s VS %s", stats.home.name, stats.away.name)
 	headerStyle := lipgloss.NewStyle().Bold(true).Align(lipgloss.Center)
 
 	// Format each stat line with side-by-side comparison
@@ -762,17 +718,17 @@ func (s *State) renderHeadToHeadStats() string {
 		"",
 		headerStyle.Render(header),
 		"",
-		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%d", stats.homeGamesPlayed), "Games Played", fmt.Sprintf("%d", stats.awayGamesPlayed)),
-		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%d-%d-%d", stats.homeWins, stats.awayWins, stats.draws), "W-L-D Record", fmt.Sprintf("%d-%d-%d", stats.awayWins, stats.homeWins, stats.draws)),
-		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%d:%d", stats.homeGoalsFor, stats.homeGoalsAgainst), "Goals (For:Against)", fmt.Sprintf("%d:%d", stats.awayGoalsFor, stats.awayGoalsAgainst)),
-		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%+d", stats.homeGoalsFor-stats.homeGoalsAgainst), "Goal Difference", fmt.Sprintf("%+d", stats.awayGoalsFor-stats.awayGoalsAgainst)),
+		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%d", stats.home.totalGames()), "Games Played", fmt.Sprintf("%d", stats.away.totalGames())),
+		fmt.Sprintf("%-15s %20s %15s", stats.home.fmtRecord(), "W-D-L Record", stats.away.fmtRecord()),
+		fmt.Sprintf("%-15s %20s %15s", stats.home.fmtGoals(), "Goals (For:Against)", stats.away.fmtGoals()),
+		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%+d", stats.home.goalDiff()), "Goal Difference", fmt.Sprintf("%+d", stats.away.goalDiff())),
 		"",
-		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%d", stats.homeCleanSheets), "Clean Sheets", fmt.Sprintf("%d", stats.awayCleanSheets)),
-		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%d", stats.home1GoalConceded), "1 Goal Conceded", fmt.Sprintf("%d", stats.away1GoalConceded)),
-		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%d", stats.home2PlusGoalsConceded), "2+ Goals Conceded", fmt.Sprintf("%d", stats.away2PlusGoalsConceded)),
+		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%d", stats.home.cleansheets), "Clean Sheets", fmt.Sprintf("%d", stats.away.cleansheets)),
+		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%d", stats.home.oneConceded), "1 Goal Conceded", fmt.Sprintf("%d", stats.away.oneConceded)),
+		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%d", stats.home.twoPlusConceded), "2+ Goals Conceded", fmt.Sprintf("%d", stats.away.twoPlusConceded)),
 		"",
-		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%.1f", stats.homeAvgGoalsFor), "Avg Goals For", fmt.Sprintf("%.1f", stats.awayAvgGoalsFor)),
-		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%.1f", stats.homeAvgGoalsAgainst), "Avg Goals Against", fmt.Sprintf("%.1f", stats.awayAvgGoalsAgainst)),
+		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%.1f", stats.home.avgGoalsFor()), "Avg Goals For", fmt.Sprintf("%.1f", stats.away.avgGoalsFor())),
+		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%.1f", stats.home.avgGoalsAgainst()), "Avg Goals Against", fmt.Sprintf("%.1f", stats.away.avgGoalsAgainst())),
 	}
 
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
@@ -780,7 +736,7 @@ func (s *State) renderHeadToHeadStats() string {
 
 func main() {
 	state := newState()
-	p := tea.NewProgram(state, tea.WithAltScreen())
+	p := tea.NewProgram(state /* tea.WithAltScreen() */)
 
 	if _, err := p.Run(); err != nil {
 		fmt.Println("Error running program:", err)
