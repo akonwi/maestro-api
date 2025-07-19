@@ -9,7 +9,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/table"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -171,7 +170,7 @@ type State struct {
 	/* Matches Screen */
 	matches           list.Model
 	showPlayedMatches bool
-	headToHeadStats   HeadToHeadStats
+	headToHeadStats   MatchupStats
 	showBetForm       bool
 	currentMatchBets  list.Model
 	betForm           BetForm
@@ -528,7 +527,7 @@ func (s *State) renderDetailMatchColumn() string {
 	sectionHeight := rightColumnHeight / 2
 
 	// Get the stats view
-	statsView := s.renderHeadToHeadStats()
+	statsView := s.renderStatsForMatchTeams()
 
 	// Get the bets view
 	betsView := s.renderMatchBetsSection()
@@ -582,130 +581,7 @@ Y: Yes, delete | N: No, cancel`, title, betName)
 		Render(confirmation)
 }
 
-func (s *State) renderStatsWithBetForm() string {
-	statsView := s.renderHeadToHeadStats()
-	betFormView := s.renderBetForm()
-
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		statsView,
-		"",
-		betFormView,
-	)
-}
-
-func (s *State) createStatsCard(title, value, subtitle string) string {
-	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
-	subtitleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true)
-
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		titleStyle.Render(title),
-		valueStyle.Render(value),
-	)
-
-	if subtitle != "" {
-		content = lipgloss.JoinVertical(
-			lipgloss.Left,
-			content,
-			subtitleStyle.Render(subtitle),
-		)
-	}
-
-	// Use flexible width instead of fixed 20
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Padding(1).
-		Height(4).
-		Render(content)
-}
-
-func (s *State) createStatsCardWithWidth(title, value, subtitle string, width int) string {
-	titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	valueStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("39"))
-	subtitleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Italic(true)
-
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		titleStyle.Render(title),
-		valueStyle.Render(value),
-	)
-
-	if subtitle != "" {
-		content = lipgloss.JoinVertical(
-			lipgloss.Left,
-			content,
-			subtitleStyle.Render(subtitle),
-		)
-	}
-
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		Padding(1).
-		Width(width).
-		Height(4).
-		Render(content)
-}
-
-func (s *State) createTableRowsFromBets(bets []Bet) []table.Row {
-	rows := make([]table.Row, len(bets))
-
-	for i, bet := range bets {
-		// Calculate P&L
-		var pnl string
-		if bet.result == Win {
-			// Calculate winnings based on odds
-			winAmount := s.calculateWinnings(bet.amount, bet.odds)
-			profit := winAmount - bet.amount
-			pnl = fmt.Sprintf("+$%.2f", profit)
-		} else if bet.result == Lose {
-			pnl = fmt.Sprintf("-$%.2f", bet.amount)
-		} else if bet.result == Push {
-			pnl = "$0.00"
-		} else {
-			pnl = "-"
-		}
-
-		// Format odds
-		oddsStr := fmt.Sprintf("%+d", bet.odds)
-
-		// Format result with color coding
-		resultStr := string(bet.result)
-
-		// Format match date
-		date := formatDate(bet.matchDate)
-
-		// Format match name
-		matchName := fmt.Sprintf("%s vs %s", bet.homeTeamName, bet.awayTeamName)
-
-		rows[i] = table.Row{
-			date,                             // Date
-			matchName,                        // Match
-			bet.name,                         // Bet name
-			oddsStr,                          // Odds
-			fmt.Sprintf("$%.2f", bet.amount), // Wager
-			resultStr,                        // Result
-			pnl,                              // P&L
-		}
-	}
-
-	return rows
-}
-
-func (s *State) calculateWinnings(amount float64, odds int) float64 {
-	if odds > 0 {
-		// Positive odds: +150 means bet $100 to win $150
-		return amount + (amount * float64(odds) / 100.0)
-	} else {
-		// Negative odds: -150 means bet $150 to win $100
-		return amount + (amount * 100.0 / float64(-odds))
-	}
-}
-
-func (s *State) renderHeadToHeadStats() string {
+func (s *State) renderStatsForMatchTeams() string {
 	stats := s.headToHeadStats
 
 	// Header with team names

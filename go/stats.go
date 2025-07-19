@@ -52,19 +52,19 @@ func (s Snapshot) fmtGoals() string {
 	return fmt.Sprintf("%d:%d", s.goalsFor, s.goalsAgainst)
 }
 
-type HeadToHeadStats struct {
+type MatchupStats struct {
 	away Snapshot
 	home Snapshot
 }
 
 // Commands
-func getHeadToHeadStats(match Match) tea.Cmd {
+func getStatsForMatchup(match Match) tea.Cmd {
 	if match.isNil() {
 		return nil
 	}
 
 	return func() tea.Msg {
-		var stats HeadToHeadStats
+		var stats MatchupStats
 		stats.home.name = match.homeTeamName
 		stats.home.id = match.homeTeamId
 		stats.away.name = match.awayTeamName

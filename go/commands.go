@@ -63,7 +63,7 @@ func getLeagues() tea.Msg {
 
 type MatchesLoaded = []Match
 
-type StatsLoaded = HeadToHeadStats
+type StatsLoaded = MatchupStats
 
 func getMatches(leagueID int, showPlayedMatches bool) tea.Cmd {
 	return func() tea.Msg {
@@ -138,5 +138,5 @@ func getMatchDetails(match Match) tea.Cmd {
 		return nil
 	}
 
-	return tea.Batch(getHeadToHeadStats(match), loadBets(match.id))
+	return tea.Batch(getStatsForMatchup(match), loadBets(match.id))
 }
