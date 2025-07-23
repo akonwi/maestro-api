@@ -39,6 +39,7 @@ type Match struct {
 	homeGoals    int
 	awayGoals    int
 	winnerId     *int
+	prediction   *MatchPrediction
 }
 
 // Implement list.Item interface for Match
@@ -422,6 +423,19 @@ func (s *State) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		performance := BettingPerformance(msg)
 		s.betDash.LoadData(performance, s.betDash.allBetsData)
 		return s, nil
+	case PredictionLoaded:
+		// Update the prediction for the matching match
+		for i, item := range s.matches.Items() {
+			if match, ok := item.(Match); ok && match.id == msg.matchID {
+				match.prediction = msg.prediction
+				// Update the item in the list
+				items := s.matches.Items()
+				items[i] = match
+				s.matches.SetItems(items)
+				break
+			}
+		}
+		return s, nil
 	}
 
 	var listCmd tea.Cmd
@@ -590,8 +604,6 @@ func (s *State) renderStatsForMatchTeams() string {
 
 	// Format each stat line with side-by-side comparison
 	lines := []string{
-		headerStyle.Render("Team Comparison"),
-		"",
 		headerStyle.Render(header),
 		"",
 		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%d", stats.home.totalGames()), "Games Played", fmt.Sprintf("%d", stats.away.totalGames())),
@@ -606,8 +618,36 @@ func (s *State) renderStatsForMatchTeams() string {
 		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%.1f", stats.home.avgGoalsFor()), "Avg Goals For", fmt.Sprintf("%.1f", stats.away.avgGoalsFor())),
 		fmt.Sprintf("%-15s %20s %15s", fmt.Sprintf("%.1f", stats.home.avgGoalsAgainst()), "Avg Goals Against", fmt.Sprintf("%.1f", stats.away.avgGoalsAgainst())),
 	}
+	lines = append(lines, s.renderPrediction()...)
 
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+func (s *State) renderPrediction() []string {
+	match := s.getCurrentMatch()
+
+	headerStyle := lipgloss.NewStyle().Bold(true).Align(lipgloss.Center)
+	contentStyle := lipgloss.NewStyle().Align(lipgloss.Center)
+
+	// Always preserve the space
+	lines := []string{
+		"",
+		"",
+		"",
+		"",
+	}
+
+	// Only show prediction content for upcoming matches with prediction data
+	if !match.isNil() && match.status == "NS" && match.prediction != nil {
+		lines = []string{
+			"",
+			headerStyle.Render("Prediction"),
+			contentStyle.Render(match.prediction.Advice),
+			"",
+		}
+	}
+
+	return lines
 }
 
 func main() {

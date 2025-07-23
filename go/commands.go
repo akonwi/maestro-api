@@ -138,5 +138,28 @@ func getMatchDetails(match Match) tea.Cmd {
 		return nil
 	}
 
-	return tea.Batch(getStatsForMatchup(match), loadBets(match.id))
+	commands := []tea.Cmd{getStatsForMatchup(match), loadBets(match.id)}
+	
+	// Fetch prediction for upcoming matches
+	if match.status == "NS" {
+		commands = append(commands, getPrediction(match.id))
+	}
+
+	return tea.Batch(commands...)
+}
+
+type PredictionLoaded struct {
+	matchID    int
+	prediction *MatchPrediction
+}
+
+func getPrediction(matchID int) tea.Cmd {
+	return func() tea.Msg {
+		prediction, err := fetchPrediction(matchID)
+		if err != nil {
+			// Don't return error for prediction failures, just log and continue
+			return PredictionLoaded{matchID: matchID, prediction: nil}
+		}
+		return PredictionLoaded{matchID: matchID, prediction: prediction}
+	}
 }
