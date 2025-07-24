@@ -34,7 +34,7 @@ export function err<E>(error: E): NotOK<E> {
 export type Result<Data, Error = null> = OK<Data> | NotOK<Error>;
 
 const headers = {
-	"x-rapidapi-key": "91be9b12c36d01fd71847355d020c8d7",
+	"x-rapidapi-key": process.env["API_KEY"] || "",
 	Accept: "application/json",
 };
 
