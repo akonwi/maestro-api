@@ -2,7 +2,7 @@ use ard/sqlite
 
 use maestro/bets
 
-fn init() Result<sqlite::Database,Str> {
+fn init() sqlite::Database!Str {
   let db = try sqlite::open("./db.sqlite")
   bets::init_db(db)
   Result::ok(db)

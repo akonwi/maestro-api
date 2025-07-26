@@ -84,7 +84,7 @@ fn fetch_season(league_id: Int, season: Int) [Match] {
     _ => panic("API_KEY environment variable not set")
   }
   let req = http::Request{
-    method: "GET",
+    method: http::Method::Get,
     url: "https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}",
     headers: [
       "x-rapidapi-key": api_key,
@@ -138,7 +138,7 @@ fn fetch_fixture(id: Int) Match? {
     _ => panic("API_KEY environment variable not set")
   }
   let req = http::Request{
-    method: "GET",
+    method: http::Method::Get,
     url: "https://v3.football.api-sports.io/fixtures?id={id}",
     headers: [
       "x-rapidapi-key": api_key,

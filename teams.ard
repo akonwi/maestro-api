@@ -52,7 +52,7 @@ fn fetch(league_id: Int, season: Int) [Team] {
   mut result: [Team] = []
 
   let req = http::Request{
-    method: "GET",
+    method: http::Method::Get,
     url: "https://v3.football.api-sports.io/teams?league={league_id}&season={season}",
     headers: [
       "x-rapidapi-key": api_key,
