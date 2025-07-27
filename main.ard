@@ -1,9 +1,11 @@
+use ard/async
 use ard/env
 use ard/io
 use ard/http
 use ard/json
 
 use maestro/bets
+use maestro/data
 use maestro/db
 
 fn internal_error(msg: Str) http::Response {
@@ -13,7 +15,11 @@ fn internal_error(msg: Str) http::Response {
 let not_found = http::Response::new(404, "Not found")
 
 fn main() {
-  let conn = db::init().expect("Failed to initialize database")
+  let conn = db::init()
+
+  // start fiber for updating db regularly
+  async::start(fn() { data::sync() })
+
   let env_port = env::get("PORT").or("")
   let port = Int::from_str(env_port).or(3000)
 

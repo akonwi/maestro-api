@@ -3,9 +3,8 @@ use ard/duration
 use ard/http
 use ard/io
 use ard/sqlite
-use ard/maybe
 
-use maestro/bets
+use maestro/db
 use maestro/matches
 use maestro/teams
 
@@ -33,28 +32,20 @@ fn get_teams(db: sqlite::Database, leagues: [League]) {
   }
 }
 
-fn main() {
-  let db = sqlite::open("./db.sqlite").expect("Failed to open database")
+fn sync() {
+  let conn = db::init()
+  // db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
+  //   .expect("Failed to create leagues table")
+  // db.exec("create table if not exists seasons (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
+  //   .expect("Failed to create seasons table")
+  // db.exec("create table if not exists teams (id INTEGER PRIMARY KEY, name TEXT, code TEXT, league_id INTEGER)")
+  //   .expect("Failed to create teams table")
+  // matches::init_db(db)
 
-  db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
-    .expect("Failed to create leagues table")
-  db.exec("create table if not exists seasons (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
-    .expect("Failed to create seasons table")
-  db.exec("create table if not exists teams (id INTEGER PRIMARY KEY, name TEXT, code TEXT, league_id INTEGER)")
-    .expect("Failed to create teams table")
-  bets::init_db(db)
-  matches::init_db(db)
+  while {
+    matches::sync(conn)
+    async::sleep(duration::from_hours(2))
+  }
 
-  // update data in the background
-  let syncWorker = async::start(fn() {
-    let db = sqlite::open("./db.sqlite").expect("Failed to open database")
-    while {
-      matches::sync(db)
-      async::sleep(duration::from_hours(1))
-    }
-  })
-  // block current fiber until syncWorker ends
-  syncWorker.join()
-
-  db.close().expect("Failed to close database")
+  conn.close().expect("Failed to close database")
 }
