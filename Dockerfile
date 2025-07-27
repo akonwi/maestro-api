@@ -28,8 +28,12 @@ WORKDIR /app
 # Copy application files
 COPY . .
 
+# Set Zeabur required environment variables
+ENV PORT=8080
+ENV HOST=0.0.0.0
+
 # Expose port
-EXPOSE 3000
+EXPOSE 8080
 
 # Run the application
 CMD ["ard", "run", "main.ard"]
