@@ -1,4 +1,5 @@
 use ard/env
+use ard/io
 use ard/http
 use ard/json
 
@@ -13,10 +14,13 @@ let not_found = http::Response::new(404, "Not found")
 
 fn main() {
   let conn = db::init().expect("Failed to initialize database")
-  let port = env::get("API_KEY").or("")
+  let env_port = env::get("API_KEY").or("")
+  let port = Int::from_str(env_port).or(3000)
+
+  io::print("starting on port {port}")
 
   http::serve(
-    port: Int::from_str(port).or(3000),
+    port: port,
     handlers: [
       "/bets/overview": fn(req: http::Request) http::Response {
       match req.method {
