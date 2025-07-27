@@ -1,8 +1,8 @@
 # Multi-stage build for Ard programming language
 FROM golang:1.25rc1-alpine AS builder
 
-# Install git and build dependencies
-RUN apk add --no-cache git
+# Install git and build dependencies (including CGO requirements)
+RUN apk add --no-cache git gcc musl-dev
 
 # Clone and build the Ard language using GitHub token
 WORKDIR /build
@@ -10,6 +10,7 @@ ARG GITHUB_TOKEN
 RUN git clone https://${GITHUB_TOKEN}@github.com/akonwi/ard.git
 WORKDIR /build/ard
 RUN go mod download
+ENV CGO_ENABLED=1
 RUN go build --tags=goexperiment.jsonv2 -o /usr/local/bin/ard
 
 # Production stage
