@@ -1,9 +1,11 @@
+use ard/env
 use ard/sqlite
 
 use maestro/bets
 
 fn init() sqlite::Database!Str {
-  let db = try sqlite::open("./db.sqlite")
+  let db_path = env::get("DB_PATH").or("")
+  let db = try sqlite::open(db_path)
   bets::init_db(db)
   Result::ok(db)
 }

@@ -35,5 +35,5 @@ ENV HOST=0.0.0.0
 # Expose port
 EXPOSE 8080
 
-# Run the application
-CMD ["ard", "run", "main.ard"]
+# Copy initial SQLite database to the volume mount point if it doesn't exist
+CMD ["sh", "-c", "if [ ! -f /db/db.sqlite ]; then cp db.sqlite /db/db.sqlite; fi && ard run main.ard"]
