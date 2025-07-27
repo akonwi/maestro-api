@@ -145,10 +145,8 @@ func (bd *BetDash) SetSize(width, height int) {
 
 	// Table section gets 50% of viewport (minus small space for help text)
 	helpHeight := 1 // Just one line for help
-	tableHeight := sectionHeight - helpHeight
-	if tableHeight < 3 {
-		tableHeight = 3 // Minimum table height
-	}
+	// Minimum table height
+	tableHeight := max(sectionHeight-helpHeight, 3)
 
 	bd.betHistoryTable.SetWidth(width)
 	bd.betHistoryTable.SetHeight(tableHeight)
@@ -349,7 +347,6 @@ func (bd BetDash) calculateWinnings(amount float64, odds int) float64 {
 		return amount + (amount * 100.0 / float64(-odds))
 	}
 }
-
 
 func (bd BetDash) renderBettingOverviewHelp() string {
 	helpStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
