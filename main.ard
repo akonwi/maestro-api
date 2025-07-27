@@ -23,20 +23,20 @@ fn main() {
     port: port,
     handlers: [
       "/bets/overview": fn(req: http::Request) http::Response {
-      match req.method {
-        http::Method::Get => {
-          match bets::get_overview(conn) {
-            ok(data) => {
-              match json::encode(data) {
-                ok(body) => http::Response::new(200, body),
-                err => internal_error(err)
-              }
-            },
-            err => internal_error(err)
-          }
-        },
-        _ => not_found
-      }
+        match req.method {
+          http::Method::Get => {
+            match bets::get_overview(conn) {
+              ok(data) => {
+                match json::encode(data) {
+                  ok(body) => http::Response::new(200, body),
+                  err => internal_error(err)
+                }
+              },
+              err => internal_error(err)
+            }
+          },
+           _ => not_found
+        }
       },
     ],
   )
