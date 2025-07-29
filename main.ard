@@ -8,11 +8,28 @@ use maestro/bets
 use maestro/data
 use maestro/db
 
+let res_headers = [
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE",
+  "Access-Control-Allow-Headers": "Content-Type",
+  "Content-Type": "application/json"
+]
+
 fn internal_error(msg: Str) http::Response {
-  http::Response::new(500, msg)
+  // todo: need copy semantics so the map can be copied and then mutated
+  // i.e. `res.headers.drop("Content-Type")`
+  http::Response{
+    status:500,
+    body: msg,
+    headers: [
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE",
+      "Access-Control-Allow-Headers": "Content-Type",
+    ],
+  }
 }
 
-let not_found = http::Response::new(404, "Not found")
+let not_found = http::Response{status:404, body:"Not found", headers:res_headers}
 
 fn main() {
   let conn = db::init()
@@ -34,7 +51,7 @@ fn main() {
             match bets::get_overview(conn) {
               ok(data) => {
                 match json::encode(data) {
-                  ok(body) => http::Response::new(200, body),
+                  ok(body) => http::Response{status:200, body:body, headers:res_headers},
                   err => internal_error(err)
                 }
               },
