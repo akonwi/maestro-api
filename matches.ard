@@ -219,3 +219,7 @@ fn sync(db: sqlite::Database) {
     io::print("Updated match data for league {id}")
   }
 }
+
+fn get_league(db: sqlite::Database, league_id: Int) [Match]!Str {
+  db.get<Match>(table: "matches", where: "league_id = {league_id}")
+}

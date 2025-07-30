@@ -8,6 +8,7 @@ use maestro/bets
 use maestro/data
 use maestro/db
 use maestro/leagues
+use maestro/matches
 
 let res_headers = [
   "Access-Control-Allow-Origin": "*",
@@ -70,6 +71,25 @@ fn main() {
               ok(data) => {
                 struct Res { leagues: [leagues::League] }
                 match json::encode(Res{ leagues:data }) {
+                  ok(body) => http::Response{status:200, body:body, headers:res_headers},
+                  err => internal_error(err)
+                }
+              },
+              err => internal_error(err)
+            }
+          },
+           _ => not_found
+        }
+      },
+
+      "/leagues/:id/matches": fn(req: http::Request) http::Response {
+        match req.method {
+          http::Method::Get => {
+            let league_id = Int::from_str(req.path_param("id")).or(-1)
+            match matches::get_league(conn, league_id) {
+              ok(data) => {
+                struct Res { matches: [matches::Match] }
+                match json::encode(Res{ matches:data }) {
                   ok(body) => http::Response{status:200, body:body, headers:res_headers},
                   err => internal_error(err)
                 }
