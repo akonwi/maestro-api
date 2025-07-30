@@ -7,5 +7,7 @@ fn init() sqlite::Database {
   let db_path = env::get("DB_PATH").or("")
   let db = sqlite::open(db_path).expect("Failed to initialize database")
   bets::init_db(db)
+  db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
+    .expect("Failed to create leagues table")
   db
 }

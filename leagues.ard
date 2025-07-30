@@ -1,0 +1,11 @@
+use ard/sqlite
+
+struct League {
+  id: Int,
+  name: Str,
+  code: Str,
+}
+
+fn get_all(db: sqlite::Database) [League]!Str {
+  db.get<League>(table: "leagues", where: "")
+}

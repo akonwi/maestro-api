@@ -8,34 +8,26 @@ use maestro/db
 use maestro/matches
 use maestro/teams
 
-struct League {
-  id: Int,
-  name: Str,
-  code: Str,
-}
-
 // sync teams
-fn get_teams(db: sqlite::Database, leagues: [League]) {
-  for league in leagues {
-    io::print("Fetching teams for {league.name}")
-    for team in teams::fetch(league.id, 2025) {
-      match db.exists("teams", "id = {team.id}").or(false) {
-        true => {},
-        false => {
-          match db.insert("teams", team) {
-            err => io::print("Failed to insert {team.name}"),
-            ok(_) => io::print("Saved {team.name}")
-          }
-        }
-      }
-    }
-  }
-}
+// fn get_teams(db: sqlite::Database, leagues: [League]) {
+//   for league in leagues {
+//     io::print("Fetching teams for {league.name}")
+//     for team in teams::fetch(league.id, 2025) {
+//       match db.exists("teams", "id = {team.id}").or(false) {
+//         true => {},
+//         false => {
+//           match db.insert("teams", team) {
+//             err => io::print("Failed to insert {team.name}"),
+//             ok(_) => io::print("Saved {team.name}")
+//           }
+//         }
+//       }
+//     }
+//   }
+// }
 
 fn sync() {
   let conn = db::init()
-  // db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
-  //   .expect("Failed to create leagues table")
   // db.exec("create table if not exists seasons (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
   //   .expect("Failed to create seasons table")
   // db.exec("create table if not exists teams (id INTEGER PRIMARY KEY, name TEXT, code TEXT, league_id INTEGER)")
