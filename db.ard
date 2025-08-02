@@ -1,13 +1,37 @@
 use ard/env
 use ard/sqlite
 
-use maestro/bets
-
 fn init() sqlite::Database {
-  let db_path = env::get("DB_PATH").or("")
-  let db = sqlite::open(db_path).expect("Failed to initialize database")
-  bets::init_db(db)
+  let db_path = env::get("DB_PATH").or("./db.sqlite")
+  let db = sqlite::open(db_path).expect("Failed to initialize database at {db_path}")
+
   db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
     .expect("Failed to create leagues table")
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS matches (
+      id INTEGER PRIMARY KEY,
+      date TEXT NOT NULL,
+      timestamp INTEGER NOT NULL,
+      league_id INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      home_team_id INTEGER NOT NULL,
+      away_team_id INTEGER NOT NULL,
+      home_goals INTEGER NOT NULL,
+      away_goals INTEGER NOT NULL,
+      winner_id INTEGER
+    )"
+  ).expect("Failed to create matches table")
+  db.exec(
+    "create table if not exists bets (
+      id INTEGER PRIMARY KEY,
+      match_id INTEGER,
+      name TEXT,
+      amount REAL,
+      line REAL,
+      odds INTEGER,
+      result TEXT
+    )"
+  ).expect("Failed to create bets table")
+
   db
 }

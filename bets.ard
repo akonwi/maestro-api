@@ -10,21 +10,6 @@ struct Bet {
   result: Str,
 }
 
-fn init_db(db: sqlite::Database) {
-  db.exec("
-    create table if not exists bets (
-      id INTEGER PRIMARY KEY,
-      match_id INTEGER,
-      name TEXT,
-      amount REAL,
-      line REAL,
-      odds INTEGER,
-      result TEXT
-    )")
-    .expect("Failed to create bets table")
-}
-
-
 fn get_all(db: sqlite::Database) [Bet]!Str {
   match db.get<Bet>(table: "bets", where: "") {
     err => Result::err(err),

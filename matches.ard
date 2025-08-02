@@ -61,23 +61,6 @@ struct Match {
   winner_id: Int?,
 }
 
-fn init_db(db: sqlite::Database) {
-  db.exec(
-    "CREATE TABLE IF NOT EXISTS matches (
-      id INTEGER PRIMARY KEY,
-      date TEXT NOT NULL,
-      timestamp INTEGER NOT NULL,
-      league_id INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      home_team_id INTEGER NOT NULL,
-      away_team_id INTEGER NOT NULL,
-      home_goals INTEGER NOT NULL,
-      away_goals INTEGER NOT NULL,
-      winner_id INTEGER
-    )"
-  ).expect("Failed to create matches table")
-}
-
 fn fetch_season(league_id: Int, season: Int) [Match] {
   let api_key = match env::get("API_KEY") {
     key => key,
