@@ -2,6 +2,7 @@ use ard/env
 use ard/http
 use ard/io
 use ard/maybe
+use ard/sqlite
 
 struct TeamEntryTeam {
 	id: Int,
@@ -79,4 +80,13 @@ fn fetch(league_id: Int, season: Int) [Team] {
   }
 
   result
+}
+
+fn get_all(db: sqlite::Database) [Int:Team]!Str {
+  let teams = try db.get<Team>(table: "teams", where: "")
+  mut by_id: [Int:Team] = [:]
+  for team in teams {
+    by_id.set(team.id, team)
+  }
+  Result::ok(by_id)
 }

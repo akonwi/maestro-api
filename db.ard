@@ -32,6 +32,14 @@ fn init() sqlite::Database {
       result TEXT
     )"
   ).expect("Failed to create bets table")
+  db.exec(
+    "create table if not exists teams (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      code TEXT,
+      league_id INTEGER NOT NULL
+    )"
+  ).expect("Failed to create teams table")
 
   db
 }

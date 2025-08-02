@@ -9,6 +9,7 @@ use maestro/data
 use maestro/db
 use maestro/leagues
 use maestro/matches
+use maestro/teams
 
 let res_headers = [
   "Access-Control-Allow-Origin": "*",
@@ -40,26 +41,31 @@ fn main() {
   async::start(fn() { data::sync() })
 
   let env_port = env::get("PORT").or("")
+  if env_port.is_empty() {
+    panic("Missing PORT environment variable")
+  }
+
   let port = Int::from_str(env_port).or(3000)
 
   io::print("starting on port {port}")
+
+  fn get_overview() http::Response {
+    let overview = try bets::get_overview(conn) -> internal_error
+    let teams_by_id = try teams::get_all(conn) -> internal_error
+
+    struct Res { overview: bets::Overview, teams: [Int:teams::Team] }
+    match json::encode(Res{ overview:overview, teams:teams_by_id }) {
+      ok(body) => http::Response{status:200, body:body, headers:res_headers},
+      err => internal_error(err)
+    }
+  }
 
   http::serve(
     port: port,
     handlers: [
       "/bets/overview": fn(req: http::Request) http::Response {
         match req.method {
-          http::Method::Get => {
-            match bets::get_overview(conn) {
-              ok(data) => {
-                match json::encode(data) {
-                  ok(body) => http::Response{status:200, body:body, headers:res_headers},
-                  err => internal_error(err)
-                }
-              },
-              err => internal_error(err)
-            }
-          },
+          http::Method::Get => get_overview(),
            _ => not_found
         }
       },
