@@ -49,23 +49,21 @@ fn main() {
 
   io::print("starting on port {port}")
 
-  fn get_overview() http::Response {
-    let overview = try bets::get_overview(conn) -> internal_error
-    let teams_by_id = try teams::get_all(conn) -> internal_error
-
-    struct Res { overview: bets::Overview, teams: [Int:teams::Team] }
-    match json::encode(Res{ overview:overview, teams:teams_by_id }) {
-      ok(body) => http::Response{status:200, body:body, headers:res_headers},
-      err => internal_error(err)
-    }
-  }
-
   http::serve(
     port: port,
     handlers: [
       "/bets/overview": fn(req: http::Request) http::Response {
         match req.method {
-          http::Method::Get => get_overview(),
+          http::Method::Get => {
+            let overview = try bets::get_overview(conn) -> internal_error
+            let teams_by_id = try teams::get_all(conn) -> internal_error
+
+            struct Res { overview: bets::Overview, teams: [Int:teams::Team] }
+            match json::encode(Res{ overview:overview, teams:teams_by_id }) {
+              ok(body) => http::Response{status:200, body:body, headers:res_headers},
+              err => internal_error(err)
+            }
+          },
            _ => not_found
         }
       },
@@ -73,14 +71,11 @@ fn main() {
       "/leagues": fn(req: http::Request) http::Response {
         match req.method {
           http::Method::Get => {
-            match leagues::get_all(conn) {
-              ok(data) => {
-                struct Res { leagues: [leagues::League] }
-                match json::encode(Res{ leagues:data }) {
-                  ok(body) => http::Response{status:200, body:body, headers:res_headers},
-                  err => internal_error(err)
-                }
-              },
+            let data = try leagues::get_all(conn) -> internal_error
+
+            struct Res { leagues: [leagues::League] }
+            match json::encode(Res{ leagues:data }) {
+              ok(body) => http::Response{status:200, body:body, headers:res_headers},
               err => internal_error(err)
             }
           },
@@ -92,14 +87,11 @@ fn main() {
         match req.method {
           http::Method::Get => {
             let league_id = Int::from_str(req.path_param("id")).or(-1)
-            match matches::get_league(conn, league_id) {
-              ok(data) => {
-                struct Res { matches: [matches::Match] }
-                match json::encode(Res{ matches:data }) {
-                  ok(body) => http::Response{status:200, body:body, headers:res_headers},
-                  err => internal_error(err)
-                }
-              },
+            let fixtures = try matches::get_league(conn, league_id) -> internal_error
+
+            struct Res { matches: [matches::Match] }
+            match json::encode(Res{ matches:fixtures }) {
+              ok(body) => http::Response{status:200, body:body, headers:res_headers},
               err => internal_error(err)
             }
           },
