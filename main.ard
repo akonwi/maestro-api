@@ -19,20 +19,18 @@ let res_headers = [
 ]
 
 fn internal_error(msg: Str) http::Response {
-  // todo: need copy semantics so the map can be copied and then mutated
-  // i.e. `res.headers.drop("Content-Type")`
+  mut headers = res_headers
+  headers.drop("Content-Type")
   http::Response{
-    status:500,
+    status: 500,
     body: msg,
-    headers: [
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE",
-      "Access-Control-Allow-Headers": "Content-Type",
-    ],
+    headers: headers,
   }
 }
 
-let not_found = http::Response{status:404, body:"Not found", headers:res_headers}
+mut nf_headers = res_headers
+nf_headers.drop("Content-Type")
+let not_found = http::Response{status:404, body:"Not found", headers:nf_headers}
 
 fn main() {
   let conn = db::init()
