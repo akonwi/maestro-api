@@ -1,4 +1,5 @@
 use ard/env
+use ard/decode
 use ard/http
 use ard/io
 use ard/maybe
@@ -89,4 +90,69 @@ fn get_all(db: sqlite::Database) [Int:Team]!Str {
     by_id.set(team.id, team)
   }
   Result::ok(by_id)
+}
+
+private fn pretty_path(e: decode::Error) Str {
+  mut path = ""
+  for s in e.path {
+    path = "{path}.{s}"
+  }
+  path
+}
+
+private fn pretty_error(e: decode::Error) Str {
+  "[{pretty_path(e)}] Expected {e.expected}, found {e.found}"
+}
+
+// fn decode_team(row: decode::Dynamic) Team![decode::Error] {
+//   let id = try decode::run(row, decode::field("id", decode::int))
+//   let league_id = try decode::run(row, decode::field("league_id", decode::int))
+//   let name = try decode::run(row, decode::field("name", decode::string))
+//   let code = try decode::run(row, decode::field("code", decode::nullable(decode::string)))
+
+//   Result::ok(Team{
+//     id:id,
+//     league_id:league_id,
+//     name:name,
+//     code:code,
+//   })
+// }
+
+// return a map of id to name
+fn get_in_matches(db: sqlite::Database, ids: [Int]) [Int:Str]!Str {
+  mut ids_string = ""
+  for id, i in ids {
+    if i == 0 {
+      ids_string = id.to_str()
+    } else {
+      ids_string = "{ids_string},{id}"
+    }
+  }
+  let rows = try db.query("
+    select t.id, t.name from teams t
+    join matches m on m.home_team_id = t.id or m.away_team_id = t.id
+    where m.id in ({ids_string});
+  ")
+
+  struct Row { id: Int, name: Str }
+  let decode_row = fn(row: decode::Dynamic) Row![decode::Error] {
+    let id = try decode::run(row, decode::field("id", decode::int))
+    let name = try decode::run(row, decode::field("name", decode::string))
+    Result::ok(Row{id:id, name:name})
+  }
+
+  let entries = try decode::run(rows, decode::list(decode_row)) -> errors {
+    mut msg = ""
+    for e in errors {
+      msg = "{msg}, {pretty_error(e)}"
+    }
+    Result::err(msg)
+  }
+
+  mut id_to_name: [Int:Str] = [:]
+  for entry in entries {
+    id_to_name.set(entry.id, entry.name)
+  }
+
+  Result::ok(id_to_name)
 }
