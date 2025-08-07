@@ -1,3 +1,4 @@
+use ard/decode
 use ard/env
 use ard/http
 use ard/io
@@ -205,4 +206,66 @@ fn sync(db: sqlite::Database) {
 
 fn get_league(db: sqlite::Database, league_id: Int) [Match]!Str {
   db.get<Match>(table: "matches", where: "league_id = {league_id}")
+}
+
+private fn ints_to_str(ints: [Int]) Str {
+  mut str = ""
+  for int, idx in ints {
+    if idx == 0 {
+      str = int.to_str()
+    } else {
+      str = "{str},{int}"
+    }
+  }
+  str
+}
+
+fn decode_match(row: decode::Dynamic) Match![decode::Error] {
+  let id = try decode::run(row, decode::field("id", decode::int))
+  let date = try decode::run(row, decode::field("date", decode::string))
+  let timestamp = try decode::run(row, decode::field("timestamp", decode::int))
+  let league_id = try decode::run(row, decode::field("league_id", decode::int))
+  let status = try decode::run(row, decode::field("status", decode::string))
+  let home_team_id = try decode::run(row, decode::field("home_team_id", decode::int))
+  let away_team_id = try decode::run(row, decode::field("away_team_id", decode::int))
+  let home_goals = try decode::run(row, decode::field("home_goals", decode::int))
+  let away_goals = try decode::run(row, decode::field("away_goals", decode::int))
+  let winner_id = try decode::run(row, decode::field("winner_id", decode::nullable(decode::int)))
+
+  Result::ok(Match{
+    id: id,
+    date: date,
+    timestamp: timestamp,
+    league_id: league_id,
+    status: status,
+    home_team_id: home_team_id,
+    away_team_id: away_team_id,
+    home_goals: home_goals,
+    away_goals: away_goals,
+    winner_id: winner_id,
+  })
+}
+
+private fn pretty_path(e: decode::Error) Str {
+  mut path = ""
+  for s, idx in e.path {
+    if idx == 0 {
+      path = s
+    } else {
+      path = "{path}.{s}"
+    }
+  }
+  path
+}
+
+private fn pretty_error(e: decode::Error) Str {
+  "({pretty_path(e)}) Expected {e.expected}, found {e.found}"
+}
+
+fn get(db: sqlite::Database, ids: [Int]) [Match]!Str {
+  let rows = try db.query("select * from matches where id in ({ints_to_str(ids)});")
+  let matches = try decode::run(rows, decode::list(decode_match)) -> errors {
+    Result::err(pretty_error(errors.at(0)))
+  }
+  Result::ok(matches)
 }

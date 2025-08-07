@@ -59,9 +59,15 @@ fn main() {
               match_ids.push(b.match_id)
             }
             let teams_by_id = try teams::get_in_matches(conn, match_ids) -> internal_error
+            let matches = try matches::get(conn, match_ids) -> internal_error
 
-            struct Res { overview: bets::Overview, teams: [Int:Str] }
-            match json::encode(Res{ overview:overview, teams:teams_by_id }) {
+            // local shape of response body
+            struct Res {
+              overview: bets::Overview,
+              teams: [Int:Str],
+              matches: [matches::Match]
+            }
+            match json::encode(Res{ overview:overview, teams:teams_by_id, matches:matches }) {
               ok(body) => http::Response{status:200, body:body, headers:res_headers},
               err => internal_error(err)
             }
