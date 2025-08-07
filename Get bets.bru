@@ -1,0 +1,15 @@
+meta {
+  name: Get bets
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/bets/overview
+  body: none
+  auth: inherit
+}
+
+settings {
+  encodeUrl: true
+}
