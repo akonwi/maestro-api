@@ -246,26 +246,10 @@ fn decode_match(row: decode::Dynamic) Match![decode::Error] {
   })
 }
 
-private fn pretty_path(e: decode::Error) Str {
-  mut path = ""
-  for s, idx in e.path {
-    if idx == 0 {
-      path = s
-    } else {
-      path = "{path}.{s}"
-    }
-  }
-  path
-}
-
-private fn pretty_error(e: decode::Error) Str {
-  "({pretty_path(e)}) Expected {e.expected}, found {e.found}"
-}
-
 fn get(db: sqlite::Database, ids: [Int]) [Match]!Str {
   let rows = try db.query("select * from matches where id in ({ints_to_str(ids)});")
   let matches = try decode::run(rows, decode::list(decode_match)) -> errors {
-    Result::err(pretty_error(errors.at(0)))
+    Result::err(errors.at(0).to_str())
   }
   Result::ok(matches)
 }

@@ -92,18 +92,6 @@ fn get_all(db: sqlite::Database) [Int:Team]!Str {
   Result::ok(by_id)
 }
 
-private fn pretty_path(e: decode::Error) Str {
-  mut path = ""
-  for s in e.path {
-    path = "{path}.{s}"
-  }
-  path
-}
-
-private fn pretty_error(e: decode::Error) Str {
-  "[{pretty_path(e)}] Expected {e.expected}, found {e.found}"
-}
-
 // fn decode_team(row: decode::Dynamic) Team![decode::Error] {
 //   let id = try decode::run(row, decode::field("id", decode::int))
 //   let league_id = try decode::run(row, decode::field("league_id", decode::int))
@@ -144,7 +132,7 @@ fn get_in_matches(db: sqlite::Database, ids: [Int]) [Int:Str]!Str {
   let entries = try decode::run(rows, decode::list(decode_row)) -> errors {
     mut msg = ""
     for e in errors {
-      msg = "{msg}, {pretty_error(e)}"
+      msg = "{msg}, {e.to_str()}"
     }
     Result::err(msg)
   }
