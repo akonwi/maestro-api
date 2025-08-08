@@ -1,3 +1,4 @@
+use ard/decode
 use ard/sqlite
 
 struct Bet {
@@ -38,30 +39,8 @@ struct Overview {
 }
 
 // todo: most of this can be done with sql
-private fn compute(bets: [Bet]) Overview {
-  mut total_wagered = 0.0
-  mut num_pending = 0
-  mut wins = 0
-  mut settled = 0
-  mut gross_payout = 0.0
-  mut gross_loss = 0.0
-
-  for bet in bets {
-    total_wagered =+ bet.amount
-    if bet.result == "pending" {
-      num_pending =+ 1
-    } else {
-      settled =+ 1
-    }
-    if bet.result == "win" {
-      wins =+ 1
-      gross_payout =+ get_payout(bet)
-    }
-    if bet.result == "lose" {
-      gross_loss =+ bet.amount
-    }
-  }
-
+private fn compute(bets: [Bet], total_wagered: Float, wins: Int, losses: Int, num_pending: Int, gross_payout: Float, gross_loss: Float) Overview {
+  let settled = wins + losses
   let net_profit = gross_payout - gross_loss
   let roi = (net_profit/total_wagered) * 100.0
 
@@ -78,8 +57,69 @@ private fn compute(bets: [Bet]) Overview {
 }
 
 fn get_overview(db: sqlite::Database) Overview!Str {
-  match get_all(db) {
-    ok(bets) => Result::ok(compute(bets)),
-    err => Result::err(err)
+  let amount_data = try db.query("SELECT COALESCE(SUM(amount), 0) as value FROM bets")
+  let total_wagered = try decode::run(amount_data, decode::field("value", decode::float)) -> errs {
+    Result::err("Failed to sum total bet amount. Expected {errs.at(0).expected} {errs.at(0).found}")
   }
+
+  let wins_data = try db.query("SELECT COUNT(*) FROM bets WHERE result = 'win'")
+  let wins = try decode::run(wins_data, decode::int) -> errs {
+    Result::err("Failed to count wins. Got {errs.at(0).found}")
+  }
+
+  let losses_data = try db.query("SELECT COUNT(*) FROM bets WHERE result = 'lose'")
+  let losses = try decode::run(losses_data, decode::int) -> errs {
+    Result::err("Failed to count losses. Got {errs.at(0).found}")
+  }
+
+  let pending_data = try db.query("SELECT COUNT(*) FROM bets WHERE result = 'pending'")
+  let num_pending = try decode::run(pending_data, decode::int) -> errs {
+    Result::err("Failed to count pending bets. Got {errs.at(0).found}")
+  }
+
+  // Calculate total payout
+	let	winning_bet_rows = try db.query("SELECT amount, odds FROM bets WHERE result = 'win'")
+
+	let payouts = try decode::run(winning_bet_rows, decode::list(fn(data: decode::Dynamic) Float![decode::Error] {
+	  let amount = try decode::run(data, decode::field("amount", decode::float))
+	  let odds = try decode::run(data, decode::field("odds", decode::int))
+
+		// Positive odds: +150 means bet $100 to win $150
+		// Negative odds: -150 means bet $150 to win $100
+		let payout = match odds > 0 {
+		  true => amount + (amount * Float::from_str(odds.to_str()).or(0.0) / 100.0),
+			false => amount + (amount * 100.0 / -Float::from_str(odds.to_str()).or(0.0))
+		}
+		Result::ok(payout)
+	})) -> errs {
+	  Result::err("Failed to calculate total payout. Expected {errs.at(0).expected}, Got {errs.at(0).found}")
+	}
+
+	mut gross_payout = 0.0
+	for p in payouts {
+	  gross_payout =+ p
+	}
+
+	// Get total losses (losing bets amount)
+	let loss_amount_data = try db.query("SELECT COALESCE(SUM(amount), 0) FROM bets WHERE result = 'lose'")
+	let gross_loss = try decode::run(loss_amount_data, decode::float) -> errs {
+	  Result::err("Failed to calculate total loss. Expected {errs.at(0).expected}, Got {errs.at(0).found}")
+	}
+
+	let settled = wins + losses
+  let net_profit = gross_payout - gross_loss
+  let roi = (net_profit/total_wagered) * 100.0
+
+  let bets = try get_all(db)
+
+  Result::ok(Overview{
+    bets: bets,
+    total_wagered: total_wagered,
+    num_pending: num_pending,
+    win_rate: (Float::from_int(wins) / Float::from_int(settled)) * 100.0,
+    gross_payout: gross_payout,
+    gross_loss: gross_loss,
+    net_profit: net_profit,
+    roi: roi,
+  })
 }
