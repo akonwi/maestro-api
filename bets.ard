@@ -11,11 +11,30 @@ struct Bet {
   result: Str,
 }
 
+fn decode_bet(data: decode::Dynamic) Bet![decode::Error] {
+  let id = try decode::run(data, decode::field("id", decode::int))
+  let match_id = try decode::run(data, decode::field("match_id", decode::int))
+  let name = try decode::run(data, decode::field("name", decode::string))
+  let amount = try decode::run(data, decode::field("amount", decode::float))
+  let line = try decode::run(data, decode::field("line", decode::float))
+  let odds = try decode::run(data, decode::field("odds", decode::int))
+  let result = try decode::run(data, decode::field("result", decode::string))
+
+  Result::ok(Bet{
+    id: id,
+    match_id: match_id,
+    name: name,
+    amount: amount,
+    line: line,
+    odds: odds,
+    result: result,
+  })
+}
+
 fn get_all(db: sqlite::Database) [Bet]!Str {
-  match db.get<Bet>(table: "bets", where: "") {
-    err => Result::err(err),
-    ok(bs) => Result::ok(bs)
-  }
+  let rows = try db.query("select * from bets")
+  let bets = try decode::run(rows, decode::list(decode_bet)) -> errs { Result::err(errs.at(0).to_str()) }
+  Result::ok(bets)
 }
 
 struct Overview {
