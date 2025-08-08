@@ -57,24 +57,24 @@ private fn compute(bets: [Bet], total_wagered: Float, wins: Int, losses: Int, nu
 }
 
 fn get_overview(db: sqlite::Database) Overview!Str {
-  let amount_data = try db.query("SELECT COALESCE(SUM(amount), 0) as value FROM bets")
+  let amount_data = try db.first("SELECT COALESCE(SUM(amount), 0) as value FROM bets")
   let total_wagered = try decode::run(amount_data, decode::field("value", decode::float)) -> errs {
-    Result::err("Failed to sum total bet amount. Expected {errs.at(0).expected} {errs.at(0).found}")
+    Result::err("Failed to sum total bet amount: {errs.at(0).to_str()}")
   }
 
-  let wins_data = try db.query("SELECT COUNT(*) FROM bets WHERE result = 'win'")
-  let wins = try decode::run(wins_data, decode::int) -> errs {
-    Result::err("Failed to count wins. Got {errs.at(0).found}")
+  let wins_data = try db.first("SELECT COUNT(*) as value FROM bets WHERE result = 'win'")
+  let wins = try decode::run(wins_data, decode::field("value", decode::int)) -> errs {
+    Result::err("Failed to count wins: {errs.at(0).to_str()}")
   }
 
-  let losses_data = try db.query("SELECT COUNT(*) FROM bets WHERE result = 'lose'")
-  let losses = try decode::run(losses_data, decode::int) -> errs {
-    Result::err("Failed to count losses. Got {errs.at(0).found}")
+  let losses_data = try db.first("SELECT COUNT(*) as value FROM bets WHERE result = 'lose'")
+  let losses = try decode::run(losses_data, decode::field("value", decode::int)) -> errs {
+    Result::err("Failed to count losses: {errs.at(0).to_str()}")
   }
 
-  let pending_data = try db.query("SELECT COUNT(*) FROM bets WHERE result = 'pending'")
-  let num_pending = try decode::run(pending_data, decode::int) -> errs {
-    Result::err("Failed to count pending bets. Got {errs.at(0).found}")
+  let pending_data = try db.first("SELECT COUNT(*) as value FROM bets WHERE result = 'pending'")
+  let num_pending = try decode::run(pending_data, decode::field("value", decode::int)) -> errs {
+    Result::err("Failed to count pending bets: {errs.at(0).to_str()}")
   }
 
   // Calculate total payout
@@ -101,9 +101,9 @@ fn get_overview(db: sqlite::Database) Overview!Str {
 	}
 
 	// Get total losses (losing bets amount)
-	let loss_amount_data = try db.query("SELECT COALESCE(SUM(amount), 0) FROM bets WHERE result = 'lose'")
-	let gross_loss = try decode::run(loss_amount_data, decode::float) -> errs {
-	  Result::err("Failed to calculate total loss. Expected {errs.at(0).expected}, Got {errs.at(0).found}")
+	let loss_amount_data = try db.first("SELECT COALESCE(SUM(amount), 0) as value FROM bets WHERE result = 'lose'")
+	let gross_loss = try decode::run(loss_amount_data, decode::field("value", decode::float)) -> errs {
+	  Result::err("Failed to calculate total loss: {errs.at(0).to_str()}")
 	}
 
 	let settled = wins + losses
