@@ -231,7 +231,7 @@ fn sync(db: sqlite::Database) {
 }
 
 fn get_league(db: sqlite::Database, league_id: Int) [Match]!Str {
-  let rows = try db.query("select * from matches where league_id = {league_id}")
+  let rows = try db.query("select * from matches where league_id = {league_id} order by timestamp desc")
   let matches = try decode::run(rows, decode::list(decode_match)) -> errs {
     Result::err(errs.at(0).to_str())
   }
