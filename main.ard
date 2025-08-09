@@ -96,9 +96,10 @@ fn main() {
           http::Method::Get => {
             let league_id = Int::from_str(req.path_param("id")).or(-1)
             let fixtures = try matches::get_league(conn, league_id) -> internal_error
+            let teams = try teams::get_all(conn) -> internal_error
 
-            struct Res { matches: [matches::Match] }
-            match json::encode(Res{ matches:fixtures }) {
+            struct Res { matches: [matches::Match], teams: [teams::Team] }
+            match json::encode(Res{ matches:fixtures, teams:teams }) {
               ok(body) => http::Response{status:200, body:body, headers:res_headers},
               err => internal_error(err)
             }

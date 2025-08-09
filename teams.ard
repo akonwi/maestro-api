@@ -97,19 +97,27 @@ fn fetch(league_id: Int, season: Int) [Team] {
   result
 }
 
-// fn decode_team(row: decode::Dynamic) Team![decode::Error] {
-//   let id = try decode::run(row, decode::field("id", decode::int))
-//   let league_id = try decode::run(row, decode::field("league_id", decode::int))
-//   let name = try decode::run(row, decode::field("name", decode::string))
-//   let code = try decode::run(row, decode::field("code", decode::nullable(decode::string)))
+fn decode_team(row: decode::Dynamic) Team![decode::Error] {
+  let id = try decode::run(row, decode::field("id", decode::int))
+  let league_id = try decode::run(row, decode::field("league_id", decode::int))
+  let name = try decode::run(row, decode::field("name", decode::string))
+  let code = try decode::run(row, decode::field("code", decode::nullable(decode::string)))
 
-//   Result::ok(Team{
-//     id:id,
-//     league_id:league_id,
-//     name:name,
-//     code:code,
-//   })
-// }
+  Result::ok(Team{
+    id: id,
+    league_id: league_id,
+    name: name,
+    code: code,
+  })
+}
+
+fn get_all(db: sqlite::Database) [Team]!Str {
+  let rows = try db.query("select * from teams")
+  let teams = try decode::run(rows, decode::list(decode_team)) -> errs {
+    Result::err(errs.at(0).to_str())
+  }
+  Result::ok(teams)
+}
 
 // return a map of id to name
 fn get_in_matches(db: sqlite::Database, ids: [Int]) [Int:Str]!Str {
