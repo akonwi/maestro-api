@@ -5,6 +5,45 @@ use ard/io
 use ard/maybe
 use ard/sqlite
 
+struct Match {
+  id: Int,
+  date: Str,
+  timestamp: Int,
+  league_id: Int,
+  status: Str,
+  home_team_id: Int,
+  away_team_id: Int,
+  home_goals: Int,
+  away_goals: Int,
+  winner_id: Int?,
+}
+
+fn decode_match(row: decode::Dynamic) Match![decode::Error] {
+  let id = try decode::run(row, decode::field("id", decode::int))
+  let date = try decode::run(row, decode::field("date", decode::string))
+  let timestamp = try decode::run(row, decode::field("timestamp", decode::int))
+  let league_id = try decode::run(row, decode::field("league_id", decode::int))
+  let status = try decode::run(row, decode::field("status", decode::string))
+  let home_team_id = try decode::run(row, decode::field("home_team_id", decode::int))
+  let away_team_id = try decode::run(row, decode::field("away_team_id", decode::int))
+  let home_goals = try decode::run(row, decode::field("home_goals", decode::int))
+  let away_goals = try decode::run(row, decode::field("away_goals", decode::int))
+  let winner_id = try decode::run(row, decode::field("winner_id", decode::nullable(decode::int)))
+
+  Result::ok(Match{
+    id: id,
+    date: date,
+    timestamp: timestamp,
+    league_id: league_id,
+    status: status,
+    home_team_id: home_team_id,
+    away_team_id: away_team_id,
+    home_goals: home_goals,
+    away_goals: away_goals,
+    winner_id: winner_id,
+  })
+}
+
 struct FixtureEntryFixtureStatus {
   short: Str,
 }
@@ -47,19 +86,6 @@ struct FixturesResponse {
   // errors: [Str],
   results: Int,
   response: [FixtureEntry],
-}
-
-struct Match {
-  id: Int,
-  date: Str,
-  timestamp: Int,
-  league_id: Int,
-  status: Str,
-  home_team_id: Int,
-  away_team_id: Int,
-  home_goals: Int,
-  away_goals: Int,
-  winner_id: Int?,
 }
 
 fn fetch_season(league_id: Int, season: Int) [Match] {
@@ -205,7 +231,11 @@ fn sync(db: sqlite::Database) {
 }
 
 fn get_league(db: sqlite::Database, league_id: Int) [Match]!Str {
-  db.get<Match>(table: "matches", where: "league_id = {league_id}")
+  let rows = try db.query("select * from matches where league_id = {league_id}")
+  let matches = try decode::run(rows, decode::list(decode_match)) -> errs {
+    Result::err(errs.at(0).to_str())
+  }
+  Result::ok(matches)
 }
 
 private fn ints_to_str(ints: [Int]) Str {
@@ -218,32 +248,6 @@ private fn ints_to_str(ints: [Int]) Str {
     }
   }
   str
-}
-
-fn decode_match(row: decode::Dynamic) Match![decode::Error] {
-  let id = try decode::run(row, decode::field("id", decode::int))
-  let date = try decode::run(row, decode::field("date", decode::string))
-  let timestamp = try decode::run(row, decode::field("timestamp", decode::int))
-  let league_id = try decode::run(row, decode::field("league_id", decode::int))
-  let status = try decode::run(row, decode::field("status", decode::string))
-  let home_team_id = try decode::run(row, decode::field("home_team_id", decode::int))
-  let away_team_id = try decode::run(row, decode::field("away_team_id", decode::int))
-  let home_goals = try decode::run(row, decode::field("home_goals", decode::int))
-  let away_goals = try decode::run(row, decode::field("away_goals", decode::int))
-  let winner_id = try decode::run(row, decode::field("winner_id", decode::nullable(decode::int)))
-
-  Result::ok(Match{
-    id: id,
-    date: date,
-    timestamp: timestamp,
-    league_id: league_id,
-    status: status,
-    home_team_id: home_team_id,
-    away_team_id: away_team_id,
-    home_goals: home_goals,
-    away_goals: away_goals,
-    winner_id: winner_id,
-  })
 }
 
 fn get(db: sqlite::Database, ids: [Int]) [Match]!Str {

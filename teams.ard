@@ -5,6 +5,27 @@ use ard/io
 use ard/maybe
 use ard/sqlite
 
+struct Team {
+  id: Int,
+	name: Str,
+	code: Str?,
+	league_id: Int,
+}
+
+fn decode_team(data: decode::Dynamic) Team![decode::Error] {
+  let id = try decode::run(data, decode::field("id", decode::int))
+  let name = try decode::run(data, decode::field("name", decode::string))
+  let code = try decode::run(data, decode::field("code", decode::nullable(decode::string)))
+  let league_id = try decode::run(data, decode::field("league_id", decode::int))
+
+  Result::ok(Team {
+    id: id,
+    name: name,
+    code: code,
+    league_id: league_id,
+  })
+}
+
 struct TeamEntryTeam {
 	id: Int,
 	name: Str,
@@ -19,13 +40,6 @@ struct TeamsResponse {
   errors: [Str],
   results: Int,
   response: [TeamEntry],
-}
-
-struct Team {
-  id: Int,
-	name: Str,
-	code: Str?,
-	league_id: Int,
 }
 
 private fn parse_teams(res: http::Response) [TeamEntryTeam] {
@@ -81,15 +95,6 @@ fn fetch(league_id: Int, season: Int) [Team] {
   }
 
   result
-}
-
-fn get_all(db: sqlite::Database) [Int:Team]!Str {
-  let teams = try db.get<Team>(table: "teams", where: "")
-  mut by_id: [Int:Team] = [:]
-  for team in teams {
-    by_id.set(team.id, team)
-  }
-  Result::ok(by_id)
 }
 
 // fn decode_team(row: decode::Dynamic) Team![decode::Error] {

@@ -1,3 +1,4 @@
+use ard/decode
 use ard/sqlite
 
 struct League {
@@ -6,6 +7,22 @@ struct League {
   code: Str,
 }
 
+fn decode_league(data: decode::Dynamic) League![decode::Error] {
+  let id = try decode::run(data, decode::field("id", decode::int))
+  let name = try decode::run(data, decode::field("name", decode::string))
+  let code = try decode::run(data, decode::field("code", decode::string))
+
+  Result::ok(League{
+    id: id,
+    name: name,
+    code: code,
+  })
+}
+
 fn get_all(db: sqlite::Database) [League]!Str {
-  db.get<League>(table: "leagues", where: "")
+  let rows = try db.query("select * from leagues")
+  let leagues = try decode::run(rows, decode::list(decode_league)) -> errs {
+    Result::err(errs.at(0).to_str())
+  }
+  Result::ok(leagues)
 }
