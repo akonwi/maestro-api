@@ -20,7 +20,7 @@ fn decode_league(data: decode::Dynamic) League![decode::Error] {
 }
 
 fn get_all(db: sqlite::Database) [League]!Str {
-  let rows = try db.query("select * from leagues")
+  let rows = try db.query("select * from leagues order by name asc")
   let leagues = try decode::run(rows, decode::list(decode_league)) -> errs {
     Result::err(errs.at(0).to_str())
   }
