@@ -44,6 +44,44 @@ fn decode_match(row: decode::Dynamic) Match![decode::Error] {
   })
 }
 
+// fixtures come from API-Football
+fn decode_fixture_entry(row: decode::Dynamic) Match![decode::Error] {
+  let id = try decode::run(row, decode::field("fixture", decode::field("id", decode::int)))
+  let date = try decode::run(row, decode::field("fixture", decode::field("date", decode::string)))
+  let timestamp = try decode::run(row, decode::field("fixture", decode::field("timestamp", decode::int)))
+  let status = try decode::run(row, decode::field("fixture", decode::field("status", decode::field("short", decode::string))))
+  let league_id = try decode::run(row, decode::field("league", decode::field("id", decode::int)))
+  let home_team_id = try decode::run(row, decode::field("teams", decode::field("home", decode::field("id", decode::int))))
+  let away_team_id = try decode::run(row, decode::field("teams", decode::field("away", decode::field("id", decode::int))))
+  let is_home_win = try decode::run(row, decode::field("teams", decode::field("home", decode::field("winner", decode::nullable(decode::bool)))))
+  let is_away_win = try decode::run(row, decode::field("teams", decode::field("away", decode::field("winner", decode::nullable(decode::bool)))))
+  let home_goals = try decode::run(row, decode::field("goals", decode::field("home", decode::nullable(decode::int))))
+  let away_goals = try decode::run(row, decode::field("goals", decode::field("away", decode::nullable(decode::int))))
+
+  let winner_id: Int? = match is_home_win.is_some() {
+    true => maybe::some(home_team_id),
+    false => {
+      match is_away_win.is_some() {
+        true => maybe::some(away_team_id),
+        false => maybe::none()
+      }
+    }
+  }
+
+  Result::ok(Match{
+    id: id,
+    date: date,
+    timestamp: timestamp,
+    league_id: league_id,
+    status: status,
+    home_team_id: home_team_id,
+    away_team_id: away_team_id,
+    home_goals: home_goals.or(0),
+    away_goals: away_goals.or(0),
+    winner_id: maybe::none(),
+  })
+}
+
 struct FixtureEntryFixtureStatus {
   short: Str,
 }
@@ -102,99 +140,15 @@ fn fetch_season(league_id: Int, season: Int) [Match] {
     ],
   }
 
-  mut matches = List::new<Match>()
-
-  match http::send(req) {
-    err => io::print("Error fetching fixtures: {err}"),
-    ok(res) => {
-      let entries = match res.json<FixturesResponse>() {
-        err => {
-          io::print("Error parsing fixtures: {err}")
-          List::new<FixtureEntry>()
-        },
-        ok(data) => data.response
-      }
-
-      for entry in entries {
-        mut winner_id: Int? = maybe::none()
-        if entry.teams.home.winner.or(false) {
-          winner_id = maybe::some(entry.teams.home.id)
-        } else if entry.teams.away.winner.or(false) {
-          winner_id = maybe::some(entry.teams.away.id)
-        }
-
-        matches.push(Match{
-          id: entry.fixture.id,
-          date: entry.fixture.date,
-          timestamp: entry.fixture.timestamp,
-          league_id: league_id,
-          status: entry.fixture.status.short,
-          home_team_id: entry.teams.home.id,
-          away_team_id: entry.teams.away.id,
-          home_goals: entry.goals.home.or(0),
-          away_goals: entry.goals.away.or(0),
-          winner_id: winner_id,
-        })
-      }
-    }
+  let res = try http::send(req) -> err {
+    io::print("Error fetching fixtures: {err}")
+    List::new<Match>()
   }
 
-  matches
-}
-
-fn fetch_fixture(id: Int) Match? {
-  let api_key = match env::get("API_KEY") {
-    key => key,
-    _ => panic("API_KEY environment variable not set")
-  }
-  let req = http::Request{
-    method: http::Method::Get,
-    url: "https://v3.football.api-sports.io/fixtures?id={id}",
-    headers: [
-      "x-rapidapi-key": api_key,
-      "Accept": "application/json",
-    ],
-  }
-
-  match http::send(req) {
-    err => {
-      io::print("Error fetching fixture: {err}")
-      maybe::none()
-    },
-    ok(res) => {
-      let entries = match res.json<FixturesResponse>() {
-        err => {
-          io::print("Error parsing fixtures: {err}")
-          List::new<FixtureEntry>()
-        },
-        ok(data) => data.response
-      }
-
-      if not entries.size() == 1 {
-        panic("Expected exactly one fixture and got {entries.size()}")
-      }
-
-      let entry = entries.at(0)
-      mut winner_id: Int? = maybe::none()
-      if entry.teams.home.winner.or(false) {
-        winner_id = maybe::some(entry.teams.home.id)
-      } else if entry.teams.away.winner.or(false) {
-        winner_id = maybe::some(entry.teams.away.id)
-      }
-
-      maybe::some(Match{
-        id: entry.fixture.id,
-        date: entry.fixture.date,
-        timestamp: entry.fixture.timestamp,
-        league_id: entry.league.id,
-        status: entry.fixture.status.short,
-        home_team_id: entry.teams.home.id,
-        away_team_id: entry.teams.away.id,
-        home_goals: entry.goals.home.or(0),
-        away_goals: entry.goals.away.or(0),
-        winner_id: winner_id,
-      })
-    }
+  let body = decode::any(res.body)
+  try decode::run(body, decode::field("response", decode::list(decode_fixture_entry))) -> errs {
+    io::print("Error decoding body.response: {errs.at(0)}")
+    List::new<Match>()
   }
 }
 

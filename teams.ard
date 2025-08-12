@@ -42,60 +42,60 @@ struct TeamsResponse {
   response: [TeamEntry],
 }
 
-private fn parse_teams(res: http::Response) [TeamEntryTeam] {
-  match res.json<TeamsResponse>() {
-    err => {
-      io::print("Unable to parse teams response: {err}")
-      List::new<TeamEntryTeam>()
-    },
-    ok(response) => {
-      io::print("Received {response.results} results")
-      mut teams = List::new<TeamEntryTeam>()
-      for entry in response.response {
-        teams.push(entry.team)
-      }
-      teams
-    },
-  }
-}
+// private fn parse_teams(res: http::Response) [TeamEntryTeam] {
+//   match res.json<TeamsResponse>() {
+//     err => {
+//       io::print("Unable to parse teams response: {err}")
+//       List::new<TeamEntryTeam>()
+//     },
+//     ok(response) => {
+//       io::print("Received {response.results} results")
+//       mut teams = List::new<TeamEntryTeam>()
+//       for entry in response.response {
+//         teams.push(entry.team)
+//       }
+//       teams
+//     },
+//   }
+// }
 
-fn fetch(league_id: Int, season: Int) [Team] {
-  let api_key = match env::get("API_KEY") {
-    key => key,
-    _ => panic("API_KEY environment variable not set")
-  }
+// fn fetch(league_id: Int, season: Int) [Team] {
+//   let api_key = match env::get("API_KEY") {
+//     key => key,
+//     _ => panic("API_KEY environment variable not set")
+//   }
 
-  mut result: [Team] = []
+//   mut result: [Team] = []
 
-  let req = http::Request{
-    method: http::Method::Get,
-    url: "https://v3.football.api-sports.io/teams?league={league_id}&season={season}",
-    headers: [
-      "x-rapidapi-key": api_key,
-      "Accept": "application/json",
-    ],
-    body: maybe::none(),
-  }
+//   let req = http::Request{
+//     method: http::Method::Get,
+//     url: "https://v3.football.api-sports.io/teams?league={league_id}&season={season}",
+//     headers: [
+//       "x-rapidapi-key": api_key,
+//       "Accept": "application/json",
+//     ],
+//     body: maybe::none(),
+//   }
 
-  match http::send(req) {
-    err => {
-      io::print("Error fetching teams: {err}")
-    },
-    ok(res) => {
-      let entries = parse_teams(res)
-      for entry in entries {
-        result.push(Team{
-          id: entry.id,
-          name: entry.name,
-          code: entry.code,
-          league_id: league_id,
-        })
-      }
-    },
-  }
+//   match http::send(req) {
+//     err => {
+//       io::print("Error fetching teams: {err}")
+//     },
+//     ok(res) => {
+//       let entries = parse_teams(res)
+//       for entry in entries {
+//         result.push(Team{
+//           id: entry.id,
+//           name: entry.name,
+//           code: entry.code,
+//           league_id: league_id,
+//         })
+//       }
+//     },
+//   }
 
-  result
-}
+//   result
+// }
 
 fn get_all(db: sqlite::Database) [Team]!Str {
   let rows = try db.query("select * from teams")
