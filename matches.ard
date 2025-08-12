@@ -82,50 +82,6 @@ fn decode_fixture_entry(row: decode::Dynamic) Match![decode::Error] {
   })
 }
 
-struct FixtureEntryFixtureStatus {
-  short: Str,
-}
-
-struct FixtureEntryFixture {
-  id: Int,
-  date: Str,
-  timestamp: Int,
-  status: FixtureEntryFixtureStatus,
-}
-
-struct FixtureEntryGoals {
-  home: Int?,
-  away: Int?,
-}
-
-struct FixtureTeam {
-  id: Int,
-  name: Str,
-  winner: Bool?,
-}
-
-struct FixtureEntryTeams {
-  home: FixtureTeam,
-  away: FixtureTeam,
-}
-
-struct FixtureEntryLeague {
-  id: Int
-}
-
-struct FixtureEntry {
-  fixture: FixtureEntryFixture,
-  goals: FixtureEntryGoals,
-  league: FixtureEntryLeague,
-  teams: FixtureEntryTeams,
-}
-
-struct FixturesResponse {
-  // errors: [Str],
-  results: Int,
-  response: [FixtureEntry],
-}
-
 fn fetch_season(league_id: Int, season: Int) [Match] {
   let api_key = match env::get("API_KEY") {
     key => key,
