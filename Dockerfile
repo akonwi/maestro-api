@@ -36,4 +36,4 @@ ENV HOST=0.0.0.0
 EXPOSE 8080
 
 # Run the application
-CMD ["ard", "run", "main.ard"]
+CMD ["ard", "run", "server/main.ard"]
