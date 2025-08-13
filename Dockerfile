@@ -1,5 +1,5 @@
 # Multi-stage build for Ard programming language
-FROM golang:1.25rc2-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install git and build dependencies (including CGO requirements)
 RUN apk add --no-cache git gcc musl-dev
