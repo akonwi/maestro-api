@@ -1,4 +1,5 @@
 use ard/async
+use ard/decode
 use ard/env
 use ard/io
 use ard/http
@@ -9,6 +10,7 @@ use maestro/data
 use maestro/db
 use maestro/leagues
 use maestro/matches
+use maestro/predictions
 use maestro/teams
 
 let res_headers = [
@@ -133,6 +135,32 @@ fn main() {
           _ => not_found
         }
       },
+
+      "/predictions/:matchId": fn(req: http::Request) http::Response {
+        match req.method {
+          http::Method::Get => {
+            let fixture_id = Int::from_str(req.path_param("matchId")).or(-1)
+            match fixture_id < -1 {
+              true => {
+                mut headers = res_headers
+                headers.drop("Content-Type")
+                http::Response{status: 400, body: "Invalid match id", headers: headers}
+              },
+              false => {
+                let p = try predictions::get(fixture_id) -> err {
+                  internal_error("Error getting prediction: {err}")
+                }
+
+                match json::encode(p) {
+                  ok(body) => http::Response{status:200, body:body, headers:res_headers},
+                  err => internal_error(err)
+                }
+              }
+            }
+          },
+          _ => not_found
+        }
+      }
     ],
   )
 }
