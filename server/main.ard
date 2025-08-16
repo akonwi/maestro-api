@@ -110,6 +110,22 @@ fn main() {
         }
       },
 
+      "/bets/:id": fn(req: http::Request) http::Response {
+        match req.method {
+          http::Method::Del => {
+            match Int::from_str(req.path_param("id")) {
+              id => {
+                try bets::delete(conn, id) -> internal_error
+                http::Response{status: 204, headers: res_headers, body: ""}
+              },
+              _ =>  not_found
+            }
+          },
+          http::Method::Options => empty_200(),
+          _ => not_found
+        }
+      },
+
       "/bets/overview": fn(req: http::Request) http::Response {
         match req.method {
           http::Method::Get => {

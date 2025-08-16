@@ -153,3 +153,7 @@ fn create(db: sqlite::Database, input: decode::Dynamic) Bet!Str {
 
   Result::ok(bet)
 }
+
+fn delete(db: sqlite::Database, id: Int) Void!Str {
+  db.exec("delete from bets where id = {id}")
+}
