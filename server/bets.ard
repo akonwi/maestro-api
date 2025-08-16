@@ -160,7 +160,7 @@ fn update(db: sqlite::Database, id: Int, input: decode::Dynamic) Void!Str {
     io::print("Error parsing result to update bet: {errs.at(0)}")
     Result::err(message: errs.at(0).to_str())
   }
-  db.exec("update bets set result = {result} where id = {id}")
+  db.exec("update bets set result = '{result}' where id = {id}")
 }
 
 fn delete(db: sqlite::Database, id: Int) Void!Str {
