@@ -83,7 +83,7 @@ fn get(fixture_id: Int) [Stat]!Str {
     ],
   })
 
-  let body = decode::any(res.body)
+  let body = decode::json(res.body)
   let stats = try decode::run(body, decode::field("response", decode_odds_data)) -> errs {
     Result::err(errs.at(0).to_str())
   }

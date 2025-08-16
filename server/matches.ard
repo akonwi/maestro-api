@@ -101,7 +101,7 @@ fn fetch_season(league_id: Int, season: Int) [Match] {
     List::new<Match>()
   }
 
-  let body = decode::any(res.body)
+  let body = decode::json(res.body)
   try decode::run(body, decode::field("response", decode::list(decode_fixture_entry))) -> errs {
     io::print("Error decoding body.response: {errs.at(0)}")
     List::new<Match>()

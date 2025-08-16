@@ -60,7 +60,7 @@ fn get(fixture_id: Int) Prediction!Str {
     ],
   })
 
-  let body = decode::any(res.body)
+  let body = decode::json(res.body)
   let predictions = try decode::run(body, decode::field("response", decode::list(decode::field("predictions", decode_entry)))) -> errs {
     Result::err(errs.at(0).to_str())
   }
