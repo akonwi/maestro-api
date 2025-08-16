@@ -38,6 +38,12 @@ fn get_all(db: sqlite::Database) [Bet]!Str {
   Result::ok(bets)
 }
 
+fn find_by_match(db: sqlite::Database, match_id: Int) [Bet]!Str {
+  let rows = try db.query("select * from bets where match_id = {match_id}")
+  let bets = try decode::run(rows, decode::list(decode_bet)) -> errs { Result::err(errs.at(0).to_str()) }
+  Result::ok(bets)
+}
+
 struct Overview {
   bets: [Bet],
   num_pending: Int,
