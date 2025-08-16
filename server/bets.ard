@@ -120,7 +120,7 @@ fn catch(errs: [decode::Error]) Bet!Str {
 
 // todo: use a union for the error type - could be bad inputs or db error
 fn create(db: sqlite::Database, input: decode::Dynamic) Bet!Str {
-  let match_id = try decode::run(input, decode::field("matchId", decode::int)) -> catch
+  let match_id = try decode::run(input, decode::field("match_id", decode::int)) -> catch
   let name = try decode::run(input, decode::field("name", decode::string)) -> catch
   let amount = try decode::run(input, decode::field("amount", decode::float)) -> catch
   let line = try decode::run(input, decode::field("line", decode::float)) -> catch
