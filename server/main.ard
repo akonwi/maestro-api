@@ -43,6 +43,10 @@ fn unauthorized() http::Response {
   }
 }
 
+fn empty_200() http::Response {
+  http::Response{status: 200, headers: res_headers, body: ""}
+}
+
 fn validate_token(token: Str) Bool!Str {
   match env::get("API_TOKEN") {
     expected => Result::ok(token == expected),
@@ -79,6 +83,7 @@ fn main() {
     handlers: [
       "/bets": fn(req: http::Request) http::Response {
         match req.method {
+          http::Method::Options => empty_200(),
           http::Method::Post => {
             let authorized = try validate_token(req.headers.get(X_API_TOKEN).or("")) -> internal_error
             match authorized {
@@ -89,9 +94,6 @@ fn main() {
                 http::Response{status: 200, headers: res_headers, body: body}
               },
             }
-          },
-          http::Method::Options => {
-            http::Response{status: 200, headers: res_headers, body: ""}
           },
           _ => not_found
         }
