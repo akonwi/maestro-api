@@ -14,10 +14,12 @@ use maestro/odds
 use maestro/predictions
 use maestro/teams
 
+let X_API_TOKEN = "X-Api-Token"
+
 let res_headers = [
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, {X_API_TOKEN}",
   "Content-Type": "application/json"
 ]
 
@@ -28,6 +30,28 @@ fn internal_error(msg: Str) http::Response {
     status: 500,
     body: msg,
     headers: headers,
+  }
+}
+
+fn unauthorized() http::Response {
+  mut headers = res_headers
+  headers.drop("Content-Type")
+  http::Response{
+    status: 403,
+    headers: headers,
+    body: "",
+  }
+}
+
+fn validate_token(token: Str) Bool!Str {
+  match env::get("API_TOKEN") {
+    expected => Result::ok(token == expected),
+    _ => {
+      let msg = "Missing API_TOKEN environment variable"
+      // todo: use Maybe.expect()
+      panic(msg)
+      Result::err(msg)
+    }
   }
 }
 
@@ -53,6 +77,26 @@ fn main() {
   http::serve(
     port: port,
     handlers: [
+      "/bets": fn(req: http::Request) http::Response {
+        match req.method {
+          http::Method::Post => {
+            let authorized = try validate_token(req.headers.get(X_API_TOKEN).or("")) -> internal_error
+            match authorized {
+              false => unauthorized(),
+              true => {
+                let bet = try bets::create(conn, decode::json(req.body.or(""))) -> internal_error
+                let body = try json::encode(bet) -> internal_error
+                http::Response{status: 200, headers: res_headers, body: body}
+              },
+            }
+          },
+          http::Method::Options => {
+            http::Response{status: 200, headers: res_headers, body: ""}
+          },
+          _ => not_found
+        }
+      },
+
       "/bets/overview": fn(req: http::Request) http::Response {
         match req.method {
           http::Method::Get => {

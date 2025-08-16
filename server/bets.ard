@@ -1,4 +1,5 @@
 use ard/decode
+use ard/io
 use ard/sqlite
 
 struct Bet {
@@ -103,4 +104,46 @@ fn get_overview(db: sqlite::Database) Overview!Str {
     net_profit: net_profit,
     roi: roi,
   })
+}
+
+fn catch(errs: [decode::Error]) Bet!Str {
+  // todo: Decode::Error.pretty_path()
+  io::print("Error parsing bet input: {errs.at(0)}")
+  Result::err(message: errs.at(0).to_str())
+}
+
+// todo: use a union for the error type - could be bad inputs or db error
+fn create(db: sqlite::Database, input: decode::Dynamic) Bet!Str {
+  let match_id = try decode::run(input, decode::field("matchId", decode::int)) -> catch
+  let name = try decode::run(input, decode::field("name", decode::string)) -> catch
+  let amount = try decode::run(input, decode::field("amount", decode::float)) -> catch
+  let line = try decode::run(input, decode::field("line", decode::float)) -> catch
+  let odds = try decode::run(input, decode::field("odds", decode::int)) -> catch
+
+  let row = try db.ins(table: "bets", values: [
+    "match_id": decode::from_int(match_id),
+    "name": decode::from_str(name),
+    "amount": decode::from_float(amount),
+    "line": decode::from_float(line),
+    "odds": decode::from_int(odds),
+    "result": decode::from_str("pending"),
+  ])
+  let id = try decode::run(row, decode::field("id", decode::int)) -> _ {
+    Result::err("Couldn't parse id from created bet row")
+  }
+  let result = try decode::run(row, decode::field("result", decode::string)) -> _ {
+    Result::err("Couldn't parse result from created bet row")
+  }
+
+  let bet = Bet{
+    id: id,
+    match_id: match_id,
+    name: name,
+    amount: amount,
+    line: line,
+    odds: odds,
+    result: result,
+  }
+
+  Result::ok(bet)
 }
