@@ -75,7 +75,7 @@ fn main() {
   }
 
   // start fiber for updating db regularly
-  // async::start(fn() { data::sync() })
+  async::start(fn() { data::sync() })
 
   let env_port = env::get("PORT").or("")
   if env_port.is_empty() {
