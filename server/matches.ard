@@ -129,7 +129,23 @@ fn sync(db: sqlite::Database) {
           ok => {},
         }
       } else {
-        match db.insert("matches", m) {
+        mut values: [Str: decode::Dynamic] = [
+          "id": decode::from_int(m.id),
+          "date": decode::from_str(m.date),
+          "timestamp": decode::from_int(m.timestamp),
+          "league_id": decode::from_int(m.league_id),
+          "status": decode::from_str(m.status),
+          "home_team_id": decode::from_int(m.home_team_id),
+          "away_team_id": decode::from_int(m.away_team_id),
+          "home_goals": decode::from_int(m.home_goals),
+          "away_goals": decode::from_int(m.away_goals),
+        ]
+
+        match m.winner_id {
+          id => values.set("winner_id", decode::from_int(id)),
+          _ => {},
+        }
+        match db.ins("matches", values) {
           err => io::print("Error inserting match({m.id}): {err}"),
           ok => {},
         }
