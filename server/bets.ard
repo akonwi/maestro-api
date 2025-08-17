@@ -126,7 +126,7 @@ fn create(db: sqlite::Database, input: decode::Dynamic) Bet!Str {
   let line = try decode::run(input, decode::field("line", decode::float)) -> catch
   let odds = try decode::run(input, decode::field("odds", decode::int)) -> catch
 
-  let row = try db.ins(table: "bets", values: [
+  let row = try db.insert(table: "bets", values: [
     "match_id": decode::from_int(match_id),
     "name": decode::from_str(name),
     "amount": decode::from_float(amount),
@@ -163,6 +163,6 @@ fn update(db: sqlite::Database, id: Int, input: decode::Dynamic) Void!Str {
   db.exec("update bets set result = '{result}' where id = {id}")
 }
 
-fn delete(db: sqlite::Database, id: Int) Void!Str {
-  db.exec("delete from bets where id = {id}")
+fn delete(db: sqlite::Database, id: Int) Bool!Str {
+  db.delete("bets", "id = {id}")
 }

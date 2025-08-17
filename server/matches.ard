@@ -108,11 +108,26 @@ fn fetch_season(league_id: Int, season: Int) [Match] {
   }
 }
 
-fn update_match(db: sqlite::Database, m: Match) {
-  match db.update("matches", "id={m.id}", m) {
-    ok => {},
-    err => io::print("Error updating match {m.id}: {err}"),
+// turn into values for the database
+fn to_values(m: Match) [Str:decode::Dynamic] {
+  mut values: [Str: decode::Dynamic] = [
+    "id": decode::from_int(m.id),
+    "date": decode::from_str(m.date),
+    "timestamp": decode::from_int(m.timestamp),
+    "league_id": decode::from_int(m.league_id),
+    "status": decode::from_str(m.status),
+    "home_team_id": decode::from_int(m.home_team_id),
+    "away_team_id": decode::from_int(m.away_team_id),
+    "home_goals": decode::from_int(m.home_goals),
+    "away_goals": decode::from_int(m.away_goals),
+  ]
+
+  match m.winner_id {
+    id => values.set("winner_id", decode::from_int(id)),
+    _ => {},
   }
+
+  values
 }
 
 // MLS
@@ -124,28 +139,12 @@ fn sync(db: sqlite::Database) {
     for m in fetch_season(id, 2025) {
       let exists = db.exists("matches", "id = {m.id}").expect("Error checking for match in db")
       if exists {
-        match db.update("matches", "id={m.id}", m) {
+        match db.update("matches", "id={m.id}", to_values(m)) {
           err => io::print("Error updating match({m.id}): {err}"),
           ok => {},
         }
       } else {
-        mut values: [Str: decode::Dynamic] = [
-          "id": decode::from_int(m.id),
-          "date": decode::from_str(m.date),
-          "timestamp": decode::from_int(m.timestamp),
-          "league_id": decode::from_int(m.league_id),
-          "status": decode::from_str(m.status),
-          "home_team_id": decode::from_int(m.home_team_id),
-          "away_team_id": decode::from_int(m.away_team_id),
-          "home_goals": decode::from_int(m.home_goals),
-          "away_goals": decode::from_int(m.away_goals),
-        ]
-
-        match m.winner_id {
-          id => values.set("winner_id", decode::from_int(id)),
-          _ => {},
-        }
-        match db.ins("matches", values) {
+        match db.insert("matches", to_values(m)) {
           err => io::print("Error inserting match({m.id}): {err}"),
           ok => {},
         }
