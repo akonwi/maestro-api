@@ -21,6 +21,14 @@ fn to_american(decimal_odd: Float) Int {
   }
 }
 
+// create a decoder that takes the first in the list
+fn first(as: fn(decode::Dynamic) $T![decode::Error]) fn(decode::Dynamic) $T![decode::Error] {
+	fn(data: decode::Dynamic) $T![decode::Error] {
+		let list = try decode::run(data, decode::list(as))
+		Result::ok(list.at(0))
+	}
+}
+
 fn int_to_string(data: decode::Dynamic) Str![decode::Error] {
   let val = try decode::as_int(data)
   Result::ok(val.to_str())
@@ -56,15 +64,17 @@ fn decode_bet(data: decode::Dynamic) Stat![decode::Error] {
   })
 }
 
-fn decode_bookmaker(data: decode::Dynamic) [Stat]![decode::Error] {
-  let bets = try decode::run(data, decode::field("bets", decode::list(decode_bet)))
-  Result::ok(bets)
-}
-
 fn decode_odds_data(data: decode::Dynamic) [Stat]![decode::Error] {
-  let bookmakers = try decode::run(data, decode::list(decode::field("bookmakers", decode::list(decode_bookmaker))))
-  let bet365 = bookmakers.at(0)
-  let bets = bet365.at(0)
+  // Extract response[0].bookmakers[0].bets[0].name
+  let bets = try decode::run(data,
+    decode::field("response",
+      first(
+        decode::field("bookmakers",
+          first(decode::field("bets", decode::list(decode_bet)))
+        )
+      )
+    )
+  )
 
   Result::ok(bets)
 }
@@ -84,7 +94,7 @@ fn get(fixture_id: Int) [Stat]!Str {
   })
 
   let body = decode::json(res.body)
-  let stats = try decode::run(body, decode::field("response", decode_odds_data)) -> errs {
+  let stats = try decode_odds_data(body) -> errs {
     Result::err(errs.at(0).to_str())
   }
   Result::ok(stats)
