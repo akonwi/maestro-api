@@ -47,18 +47,6 @@ fn empty_200() http::Response {
   http::Response{status: 200, headers: res_headers, body: ""}
 }
 
-fn validate_token(token: Str) Bool!Str {
-  match env::get("API_TOKEN") {
-    expected => Result::ok(token == expected),
-    _ => {
-      let msg = "Missing API_TOKEN environment variable"
-      // todo: use Maybe.expect()
-      panic(msg)
-      Result::err(msg)
-    }
-  }
-}
-
 mut nf_headers = res_headers
 nf_headers.drop("Content-Type")
 let not_found = http::Response{status:404, body:"Not found", headers:nf_headers}
@@ -71,6 +59,12 @@ fn main() {
     _ => {
       panic("Missing API_TOKEN environment variable")
       ""
+    }
+  }
+  fn is_authorized(header: Str?) Bool {
+    match header {
+      h => secret == h,
+      _ => false
     }
   }
 
@@ -104,8 +98,7 @@ fn main() {
           },
           http::Method::Options => empty_200(),
           http::Method::Post => {
-            let authorized = try validate_token(req.headers.get(X_API_TOKEN).or("")) -> internal_error
-            match authorized {
+            match is_authorized(req.headers.get(X_API_TOKEN)) {
               false => unauthorized(),
               true => {
                 let bet = try bets::create(conn, decode::json(req.body.or(""))) -> internal_error
@@ -121,8 +114,7 @@ fn main() {
       "/bets/:id": fn(req: http::Request) http::Response {
         match req.method {
           http::Method::Del => {
-            let authorized = try validate_token(req.headers.get(X_API_TOKEN).or("")) -> internal_error
-            match authorized {
+            match is_authorized(req.headers.get(X_API_TOKEN)) {
               false => unauthorized(),
               true => {
                 match Int::from_str(req.path_param("id")) {
@@ -137,7 +129,7 @@ fn main() {
           },
           http::Method::Options => empty_200(),
           http::Method::Patch => {
-            match secret == req.headers.get(X_API_TOKEN).or("") {
+            match is_authorized(req.headers.get(X_API_TOKEN)) {
               false => unauthorized(),
               true => {
                 match Int::from_str(req.path_param("id")) {
