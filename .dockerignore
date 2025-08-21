@@ -6,12 +6,5 @@
 TODO.md
 .DS_Store
 
-# Go modules and build cache (if any)
-go.mod
-go.sum
-
-# TUI directory (not needed for web server)
-tui/
-
 # MCP directory (development tooling)
 mcp/
