@@ -6,7 +6,7 @@ use ard/maybe
 struct Winner {
   id: Int,
   name: Str,
-  comment: Str,
+  comment: Str?,
 }
 
 struct Prediction {
@@ -20,7 +20,7 @@ struct Prediction {
 private fn decode_winner(data: decode::Dynamic) Winner![decode::Error] {
   let winner_id = try decode::run(data, decode::field("id", decode::int))
   let winner_name = try decode::run(data,  decode::field("name", decode::string))
-  let winner_comment = try decode::run(data,  decode::field("comment", decode::string))
+  let winner_comment = try decode::run(data,  decode::field("comment", decode::nullable(decode::string)))
 
   Result::ok(Winner{
     id: winner_id,
