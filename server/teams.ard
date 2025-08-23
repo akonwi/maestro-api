@@ -73,16 +73,22 @@ fn get_in_matches(db: sqlite::Database, ids: [Int]) [Int:Str]!Str {
 struct Snapshot {
 	id: Int,
 	name: Str,
+	num_games: Int,
 	wins: Int,
 	losses: Int,
 	draws:  Int,
 
 	goals_against: Int,
 	goals_for: Int,
+	goals_diff: Int,
+	xgf: Float,
+	xga: Float,
 
 	cleansheets: Int,
 	one_conceded: Int,
 	two_plus_conceded: Int,
+
+	win_rate: Float,
 }
 
 struct Comparison {
@@ -138,6 +144,10 @@ fn get_snapshot(db: sqlite::Database, id: Int) Snapshot!Str {
 	  Result::err("Unable to decode away goals against: {errs.at(0)}")
 	}
 
+	let goals_for = home_goals_for + away_goals_for
+	let goals_against = home_goals_against + away_goals_against
+	let goals_diff = goals_for - goals_against
+
 	let cleansheets = try db.count("matches",
 	  "status = 'FT'
 		and (
@@ -159,13 +169,18 @@ fn get_snapshot(db: sqlite::Database, id: Int) Snapshot!Str {
 	  id: id,
 		name: name,
 	  wins: wins,
+		num_games: total_games,
 		losses: losses,
 		draws: draws,
-		goals_for: home_goals_for + away_goals_for,
-		goals_against: home_goals_against + away_goals_against,
+		goals_for: goals_for,
+		goals_against: goals_against,
+		goals_diff: goals_diff,
 		cleansheets: cleansheets,
 		one_conceded: one_conceded,
 		two_plus_conceded: two_plus_conceded,
+		xgf: Float::from_int(goals_for) / Float::from_int(total_games),
+		xga: Float::from_int(goals_against) / Float::from_int(total_games),
+		win_rate: Float::from_int(wins) / Float::from_int(total_games),
 	})
 }
 
