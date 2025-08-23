@@ -83,6 +83,7 @@ struct Snapshot {
 	goals_diff: Int,
 	xgf: Float,
 	xga: Float,
+	leakiness: Float,
 
 	cleansheets: Int,
 	one_conceded: Int,
@@ -178,6 +179,7 @@ fn get_snapshot(db: sqlite::Database, id: Int) Snapshot!Str {
 		cleansheets: cleansheets,
 		one_conceded: one_conceded,
 		two_plus_conceded: two_plus_conceded,
+		leakiness: Float::from_int(two_plus_conceded) / Float::from_int(total_games) * 100.0,
 		xgf: Float::from_int(goals_for) / Float::from_int(total_games),
 		xga: Float::from_int(goals_against) / Float::from_int(total_games),
 		win_rate: Float::from_int(wins) / Float::from_int(total_games),
