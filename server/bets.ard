@@ -95,7 +95,7 @@ fn get_overview(db: sqlite::Database) Overview!Str {
 	}
 
 	let settled = wins + losses
-  let net_profit = gross_payout - gross_loss
+	let net_profit = gross_payout - total_wagered
   let roi = (net_profit/total_wagered) * 100.0
 
   let bets = try get_all(db)
