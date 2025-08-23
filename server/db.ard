@@ -1,3 +1,4 @@
+use ard/decode
 use ard/env
 use ard/sqlite
 
@@ -40,6 +41,12 @@ fn init() sqlite::Database {
       league_id INTEGER NOT NULL
     )"
   ).expect("Failed to create teams table")
+
+  db.insert(table: "leagues", values: [
+    "id": decode::from_int(40),
+    "name": decode::from_str("EFL Championship"),
+    "code": decode::from_str("EFC"),
+  ])
 
   db
 }

@@ -130,8 +130,8 @@ fn to_values(m: Match) [Str:decode::Dynamic] {
   values
 }
 
-// EPL, MLS
-let league_ids = [39,253]
+// EPL, Championship, MLS
+let league_ids = [39,40,253]
 let season = 2025
 
 // update the matches in the db
