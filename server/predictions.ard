@@ -33,16 +33,16 @@ private fn decode_entry(data: decode::Dynamic) Prediction![decode::Error] {
   let advice = try decode::run(data, decode::field("advice", decode::nullable(decode::string)))
   let winner = try decode::run(data, decode::field("winner", decode::nullable(decode_winner)))
   let win_or_draw = try decode::run(data, decode::field("win_or_draw", decode::nullable(decode::bool)))
-  let home_goals = try decode::run(data, decode::field("goals", decode::field("home", decode::string)))
-  let away_goals = try decode::run(data, decode::field("goals", decode::field("away", decode::string)))
+  let home_goals = try decode::run(data, decode::field("goals", decode::field("home", decode::nullable(decode::string))))
+  let away_goals = try decode::run(data, decode::field("goals", decode::field("away", decode::nullable(decode::string))))
 
 
   Result::ok(Prediction{
     advice: advice,
     winner: winner,
     win_or_draw: win_or_draw,
-    home_goals: home_goals,
-    away_goals: away_goals,
+    home_goals: home_goals.or("0"),
+    away_goals: away_goals.or("0"),
   })
 }
 

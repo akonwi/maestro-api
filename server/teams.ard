@@ -5,6 +5,7 @@ use ard/io
 use ard/maybe
 use ard/sqlite
 
+// todo: drop league_id because it's not permanent
 struct Team {
   id: Int,
 	name: Str,
