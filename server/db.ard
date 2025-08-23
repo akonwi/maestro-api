@@ -42,10 +42,5 @@ fn init() sqlite::Database {
     )"
   ).expect("Failed to create teams table")
 
-  match db.exec("ALTER TABLE teams DROP COLUMN league_id") {
-    ok => {},
-    err => io::print("Failed to drop teams.league_id column: {err}")
-  }
-
   db
 }
