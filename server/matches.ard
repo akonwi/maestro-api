@@ -130,13 +130,14 @@ fn to_values(m: Match) [Str:decode::Dynamic] {
   values
 }
 
-// MLS
-let league_ids = [253]
+// EPL, MLS
+let league_ids = [39,253]
+let season = 2025
 
 // update the matches in the db
 fn sync(db: sqlite::Database) {
   for id in league_ids {
-    for m in fetch_season(id, 2025) {
+    for m in fetch_season(id, season) {
       let exists = db.exists("matches", "id = {m.id}").expect("Error checking for match in db")
       if exists {
         match db.update("matches", "id={m.id}", to_values(m)) {
