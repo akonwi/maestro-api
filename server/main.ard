@@ -52,7 +52,8 @@ nf_headers.drop("Content-Type")
 let not_found = http::Response{status:404, body:"Not found", headers:nf_headers}
 
 fn main() {
-  let conn = db::init()
+  let conn = db::connect()
+  db::init(conn)
 
   let secret = match env::get("API_TOKEN") {
     secret => secret,

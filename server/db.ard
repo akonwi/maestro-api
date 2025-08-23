@@ -2,10 +2,13 @@ use ard/env
 use ard/io
 use ard/sqlite
 
-fn init() sqlite::Database {
+fn connect() sqlite::Database {
   let db_path = env::get("DB_PATH").or("./db.sqlite")
-  let db = sqlite::open(db_path).expect("Failed to initialize database at {db_path}")
+  sqlite::open(db_path).expect("Failed to initialize database at {db_path}")
+}
 
+// migrations
+fn init(db: sqlite::Database) {
   db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
     .expect("Failed to create leagues table")
   db.exec(
@@ -41,6 +44,4 @@ fn init() sqlite::Database {
       league_id INTEGER NOT NULL
     )"
   ).expect("Failed to create teams table")
-
-  db
 }

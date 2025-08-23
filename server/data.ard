@@ -9,7 +9,7 @@ use maestro/matches
 use maestro/teams
 
 fn sync() {
-  let conn = db::init()
+  let conn = db::connect()
   // db.exec("create table if not exists seasons (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
   //   .expect("Failed to create seasons table")
 
