@@ -176,7 +176,7 @@ private fn ints_to_str(ints: [Int]) Str {
   str
 }
 
-fn get(db: sqlite::Database, ids: [Int]) [Match]!Str {
+fn find(db: sqlite::Database, ids: [Int]) [Match]!Str {
   let rows = try db.query("select * from matches where id in ({ints_to_str(ids)});")
   let matches = try decode::run(rows, decode::list(decode_match)) -> errors {
     Result::err(errors.at(0).to_str())
