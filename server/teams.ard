@@ -5,25 +5,21 @@ use ard/io
 use ard/maybe
 use ard/sqlite
 
-// todo: drop league_id because it's not permanent
 struct Team {
   id: Int,
 	name: Str,
 	code: Str?,
-	league_id: Int,
 }
 
 fn decode_team(data: decode::Dynamic) Team![decode::Error] {
   let id = try decode::run(data, decode::field("id", decode::int))
   let name = try decode::run(data, decode::field("name", decode::string))
   let code = try decode::run(data, decode::field("code", decode::nullable(decode::string)))
-  let league_id = try decode::run(data, decode::field("league_id", decode::int))
 
   Result::ok(Team {
     id: id,
     name: name,
     code: code,
-    league_id: league_id,
   })
 }
 
@@ -191,7 +187,6 @@ fn decode_from_api(data: decode::Dynamic) Team![decode::Error] {
     id: id,
     name: name,
     code: code,
-    league_id: 0
   })
 }
 
@@ -199,7 +194,6 @@ fn to_values(team: Team) [Str:decode::Dynamic] {
   mut values = [
     "id": decode::from_int(team.id),
     "name": decode::from_str(team.name),
-    "league_id": decode::from_int(team.league_id),
   ]
   match team.code {
     code => values.set("code", decode::from_str(code)),

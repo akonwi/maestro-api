@@ -1,4 +1,5 @@
 use ard/env
+use ard/io
 use ard/sqlite
 
 fn init() sqlite::Database {
@@ -40,6 +41,11 @@ fn init() sqlite::Database {
       league_id INTEGER NOT NULL
     )"
   ).expect("Failed to create teams table")
+
+  match db.exec("ALTER TABLE teams DROP COLUMN league_id") {
+    ok => {},
+    err => io::print("Failed to drop teams.league_id column: {err}")
+  }
 
   db
 }
