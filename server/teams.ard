@@ -27,77 +27,6 @@ fn decode_team(data: decode::Dynamic) Team![decode::Error] {
   })
 }
 
-struct TeamEntryTeam {
-	id: Int,
-	name: Str,
-	code: Str?,
-}
-
-struct TeamEntry {
-  team: TeamEntryTeam
-}
-
-struct TeamsResponse {
-  errors: [Str],
-  results: Int,
-  response: [TeamEntry],
-}
-
-// private fn parse_teams(res: http::Response) [TeamEntryTeam] {
-//   match res.json<TeamsResponse>() {
-//     err => {
-//       io::print("Unable to parse teams response: {err}")
-//       List::new<TeamEntryTeam>()
-//     },
-//     ok(response) => {
-//       io::print("Received {response.results} results")
-//       mut teams = List::new<TeamEntryTeam>()
-//       for entry in response.response {
-//         teams.push(entry.team)
-//       }
-//       teams
-//     },
-//   }
-// }
-
-// fn fetch(league_id: Int, season: Int) [Team] {
-//   let api_key = match env::get("API_KEY") {
-//     key => key,
-//     _ => panic("API_KEY environment variable not set")
-//   }
-
-//   mut result: [Team] = []
-
-//   let req = http::Request{
-//     method: http::Method::Get,
-//     url: "https://v3.football.api-sports.io/teams?league={league_id}&season={season}",
-//     headers: [
-//       "x-rapidapi-key": api_key,
-//       "Accept": "application/json",
-//     ],
-//     body: maybe::none(),
-//   }
-
-//   match http::send(req) {
-//     err => {
-//       io::print("Error fetching teams: {err}")
-//     },
-//     ok(res) => {
-//       let entries = parse_teams(res)
-//       for entry in entries {
-//         result.push(Team{
-//           id: entry.id,
-//           name: entry.name,
-//           code: entry.code,
-//           league_id: league_id,
-//         })
-//       }
-//     },
-//   }
-
-//   result
-// }
-
 fn get_all(db: sqlite::Database) [Team]!Str {
   let rows = try db.query("select * from teams")
   let teams = try decode::run(rows, decode::list(decode_team)) -> errs {
@@ -251,4 +180,82 @@ fn get_comparison(db: sqlite::Database, home_id: Int, away_id: Int) Comparison!S
     home: home,
     away: away,
   })
+}
+
+fn decode_from_api(data: decode::Dynamic) Team![decode::Error] {
+  let id = try decode::run(data, decode::field("id", decode::int))
+  let name = try decode::run(data, decode::field("name", decode::string))
+  let code = try decode::run(data, decode::field("code", decode::nullable(decode::string)))
+
+  Result::ok(Team{
+    id: id,
+    name: name,
+    code: code,
+    league_id: 0
+  })
+}
+
+fn to_values(team: Team) [Str:decode::Dynamic] {
+  mut values = [
+    "id": decode::from_int(team.id),
+    "name": decode::from_str(team.name),
+    "league_id": decode::from_int(team.league_id),
+  ]
+  match team.code {
+    code => values.set("code", decode::from_str(code)),
+    _ => {},
+  }
+  values
+}
+
+fn decode_and_save(db: sqlite::Database, data: decode::Dynamic) Bool![decode::Error] {
+  let teams = try decode::run(data,
+    decode::field("response",
+      decode::list(decode::field("team", decode_from_api))
+    )
+  )
+
+  for t in teams {
+    let exists = db.exists("teams", "id = {t.id}").expect("Error checking for team in db")
+    if exists {
+      match db.update("teams", "id={t.id}", to_values(t)) {
+        ok => {},
+        err => io::print("Error updating team {t.name}: {err}")
+      }
+    } else {
+      match db.insert("teams", to_values(t)) {
+        ok => {},
+        err => io::print("Error inserting team {t.name}: {err}")
+      }
+    }
+  }
+
+  Result::ok(true)
+}
+
+// load teams into the db
+fn sync(db: sqlite::Database) {
+  let api_key = match env::get("API_KEY") {
+    key => key,
+    _ => panic("API_KEY environment variable not set")
+  }
+
+  for league_id in [39, 40, 253] {
+    let req = http::Request{
+      method: http::Method::Get,
+      url: "https://v3.football.api-sports.io/teams?league={league_id}&season=2025",
+      headers: [
+        "x-rapidapi-key": api_key,
+        "Accept": "application/json",
+      ],
+    }
+    match http::send(req) {
+      ok(resp) => {
+        decode_and_save(db, decode::json(resp.body))
+      },
+      err => io::print("Error fetching teams in league {league_id}: {err}")
+    }
+
+    io::print("Synced teams in league {league_id}")
+  }
 }
