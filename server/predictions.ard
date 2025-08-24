@@ -7,6 +7,8 @@ use ard/sqlite
 use maestro/matches
 use maestro/teams
 
+// --- Predictions come from API-Football
+
 struct Winner {
   id: Int,
   name: Str,
@@ -19,18 +21,6 @@ struct Prediction {
   win_or_draw: Bool?,
   home_goals: Str,
   away_goals: Str,
-}
-
-struct BetRecommendations {
-  home_goals: Float?,
-  away_goals: Float?,
-  total_goals: Float?,
-  both_teams_to_score: Bool?,
-}
-
-struct Analysis {
-  match_id: Int,
-  recommendations: BetRecommendations
 }
 
 private fn decode_winner(data: decode::Dynamic) Winner![decode::Error] {
@@ -83,81 +73,63 @@ fn get(fixture_id: Int) Prediction!Str {
   Result::ok(predictions.at(0))
 }
 
-// (AxGF + BxGA) / 2
-private fn get_team_goal_line(xgf: Float, xga: Float) Float {
-  let xg = (xgf + xga) / 2.0
-  match xg >= 2.0 {
-    true => 2.5,
-    false => match xg >= 1.5 {
-      true => 1.5,
-      false => 0.5
-    }
-  }
+// --- Analysis is based on my personal algorithm
+struct BetRecommendations {
+  home_goals: Float?,
+  away_goals: Float?,
+  total_goals: Float?,
+  both_teams_to_score: Bool?,
 }
 
 struct ConfidenceScore {
-  score: Float,        // 0-100 overall confidence
-  breakdown: Str,      // Detailed scoring breakdown
-  category: Str,       // "High", "Medium", "Low"
+  score: Float,
+  xg_advantage: Float,
+  quality_gap: Float,
+  def_vuln: Float,
+  label: Str,   // "High", "Medium", "Low"
 }
 
-fn calculate_confidence(attacking_team: teams::Snapshot, defending_team: teams::Snapshot) ConfidenceScore {
-  mut total_score = 0.0
-  mut breakdown = ""
+struct Analysis {
+  match_id: Int,
+  recommendations: BetRecommendations,
+  home_confidence: ConfidenceScore,
+  away_confidence: ConfidenceScore,
+}
 
-  // 1. Expected Goals Advantage (60% weight = 60 points max)
-  let xg_advantage = attacking_team.xgf - defending_team.xga
-  mut xg_score = 0.0
-  if xg_advantage >= 0.5 {
-    xg_score = 60.0
-  } else if xg_advantage >= 0.3 {
-    xg_score = 45.0
-  } else if xg_advantage >= 0.1 {
-    xg_score = 30.0
-  } else if xg_advantage >= 0.0 {
-    xg_score = 15.0
-  }
-  total_score =+ xg_score
-  breakdown = "xG advantage: {xg_advantage} ({xg_score} pts)"
+// Get naive/conservative base line
+private fn get_team_goal_line(xgf: Float, xga: Float) Float {
+  let xg = (xgf + xga) / 2.0
+  Float::floor(xg - 0.5) + 0.5
+}
 
-  // 2. Team Quality Gap (30% weight = 30 points max)
-  let quality_gap = attacking_team.win_rate - defending_team.win_rate
-  mut quality_score = 0.0
-  if quality_gap >= 30.0 {
-    quality_score = 30.0
-  } else if quality_gap >= 20.0 {
-    quality_score = 22.0
-  } else if quality_gap >= 10.0 {
-    quality_score = 15.0
-  } else if quality_gap >= 0.0 {
-    quality_score = 8.0
+fn calculate_confidence(attacking: teams::Snapshot, defending: teams::Snapshot) ConfidenceScore {
+  let xg_advantage = attacking.xgf - defending.xga
+  let quality_gap = attacking.win_rate - defending.win_rate
+  mut def_vuln = 0.0
+  if defending.leakiness <= 30.0 {
+    def_vuln = 0.1
+  } else if defending.leakiness < 50.0 {
+    def_vuln = 0.3
   }
-  total_score =+ quality_score
-  breakdown = "{breakdown}, Quality gap: {quality_gap}% ({quality_score} pts)"
+  if defending.leakiness >= 50.0 {
+    def_vuln = 0.5
+  }
 
-  // 3. Defensive Vulnerability (10% weight = 10 points max)
-  mut def_score = 1.0
-  if defending_team.leakiness >= 60.0 {
-    def_score = 10.0
-  } else if defending_team.leakiness >= 45.0 {
-    def_score = 7.0
-  } else if defending_team.leakiness >= 30.0 {
-    def_score = 4.0
-  }
-  total_score =+ def_score
-  breakdown = "{breakdown}, Def vulnerability: {defending_team.leakiness}% ({def_score} pts)"
+  let score = xg_advantage + quality_gap + def_vuln
 
   mut category = "Low"
-  if total_score >= 80.0 {
+  if score >= 0.75 {
     category = "High"
-  } else if total_score >= 60.0 {
+  } else if score >= 0.51 {
     category = "Medium"
   }
 
   ConfidenceScore{
-    score: total_score,
-    breakdown: breakdown,
-    category: category
+    score: score,
+    xg_advantage: xg_advantage,
+    quality_gap: quality_gap,
+    def_vuln: def_vuln,
+    label: category
   }
 }
 
@@ -168,16 +140,13 @@ fn get_analysis(db: sqlite::Database, fixture_id: Int) Analysis!Str {
 
   mut recs = BetRecommendations{}
 
-  let home_confidence = calculate_confidence(home, away)
-  if home_confidence.score >= 60.0 {  // Medium+ confidence threshold
-    let expected_goals = (home.xgf + away.xga) / 2.0
-    recs.home_goals = calculate_line(expected_goals)
-  }
   recs.home_goals = get_team_goal_line(home.xgf, away.xga)
   recs.away_goals = get_team_goal_line(away.xgf, home.xga)
 
   Result::ok(Analysis{
     match_id: fixture_id,
-    recommendations: recs
+    recommendations: recs,
+    home_confidence: calculate_confidence(attacking: home, defending: away),
+    away_confidence: calculate_confidence(attacking: away, defending: home),
   })
 }
