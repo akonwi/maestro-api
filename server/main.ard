@@ -257,32 +257,6 @@ fn main() {
         }
       }
 
-      "/predictions/:matchId": fn(req: http::Request) http::Response {
-        match req.method {
-          http::Method::Get => {
-            let fixture_id = Int::from_str(req.path_param("matchId")).or(-1)
-            match fixture_id < -1 {
-              true => {
-                mut headers = res_headers
-                headers.drop("Content-Type")
-                http::Response{status: 400, body: "Invalid match id", headers: headers}
-              },
-              false => {
-                let p = try predictions::get(fixture_id) -> err {
-                  internal_error("Error getting prediction: {err}")
-                }
-
-                match json::encode(p) {
-                  ok(body) => http::Response{status:200, body:body, headers:res_headers},
-                  err => internal_error(err)
-                }
-              }
-            }
-          },
-          _ => not_found
-        }
-      },
-
       "/analysis/:matchId": fn(req: http::Request) http::Response {
         match req.method {
           http::Method::Get => {
@@ -294,11 +268,19 @@ fn main() {
                 http::Response{status: 400, body: "Invalid match id", headers: headers}
               },
               false => {
-                let p = try predictions::get_analysis(conn, fixture_id) -> err {
+                let analysis = try predictions::get_analysis(conn, fixture_id) -> err {
                   internal_error("Error getting analysis: {err}")
                 }
+                let prediction = try predictions::get(fixture_id) -> err {
+                  internal_error("Error getting prediction: {err}")
+                }
 
-                match json::encode(p) {
+                struct Res {
+                  analysis: predictions::Analysis,
+                  prediction: predictions::Prediction,
+                }
+
+                match json::encode(Res{ analysis: analysis, prediction: prediction }) {
                   ok(body) => http::Response{status:200, body:body, headers:res_headers},
                   err => internal_error(err)
                 }
