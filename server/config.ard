@@ -1,0 +1,8 @@
+use ard/env
+
+fn api_key() Str {
+  match env::get("API_KEY") {
+    key => key,
+    _ => panic("API_KEY environment variable not set")
+  }
+}

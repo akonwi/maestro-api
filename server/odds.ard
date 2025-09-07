@@ -1,6 +1,7 @@
 use ard/decode
 use ard/env
 use ard/http
+use ard/io
 
 struct Line {
   name: Str,
@@ -89,7 +90,8 @@ fn get(fixture_id: Int) [Stat]!Str {
 
   let body = decode::json(res.body)
   let stats = try decode_odds_data(body) -> errs {
-    Result::err(errs.at(0).to_str())
+    io::print("Error decoding odds: {errs.at(0)}")
+    Result::ok(List::new<Stat>())
   }
   Result::ok(stats)
 }

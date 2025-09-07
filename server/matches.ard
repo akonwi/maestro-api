@@ -1,9 +1,12 @@
+use ard/dates
 use ard/decode
 use ard/env
 use ard/http
 use ard/io
 use ard/maybe
 use ard/sqlite
+
+use maestro/config
 
 struct Match {
   id: Int,
@@ -190,4 +193,81 @@ fn get(db: sqlite::Database, id: Int) Match!Str {
     Result::err(errors.at(0).to_str())
   }
   Result::ok(found)
+}
+
+struct Team {
+  id: Int,
+  name: Str,
+  logo: Str?
+}
+
+struct Fixture {
+  id: Int,
+  date: Str,
+  timestamp: Int,
+
+  league_id: Int,
+  league_name: Str,
+  season: Int,
+
+  home: Team,
+  away: Team,
+}
+
+fn decode_team(row: Dynamic) Team![decode::Error] {
+  let id = try decode::run(row, decode::field("id", decode::int))
+  let name = try decode::run(row, decode::field("name", decode::string))
+  let logo = try decode::run(row, decode::field("logo", decode::nullable(decode::string)))
+
+  Result::ok(Team{
+    id: id,
+    name: name,
+    logo: logo,
+  })
+}
+
+fn decode_fixture(row: Dynamic) Fixture![decode::Error] {
+  let id = try decode::run(row, decode::field("fixture", decode::field("id", decode::int)))
+  let date = try decode::run(row, decode::field("fixture", decode::field("date", decode::string)))
+  let timestamp = try decode::run(row, decode::field("fixture", decode::field("timestamp", decode::int)))
+  let league_id = try decode::run(row, decode::field("league", decode::field("id", decode::int)))
+  let league_name = try decode::run(row, decode::field("league", decode::field("name", decode::string)))
+  let league_season = try decode::run(row, decode::field("league", decode::field("season", decode::int)))
+  let home = try decode::run(row, decode::field("teams", decode::field("home", decode_team)))
+  let away = try decode::run(row, decode::field("teams", decode::field("away", decode_team)))
+
+  Result::ok(Fixture{
+    id: id,
+    date: date,
+    timestamp: timestamp,
+    league_id: league_id,
+    league_name: league_name,
+    season: league_season,
+    home: home,
+    away: away,
+  })
+}
+
+fn find_today() [Fixture] {
+  let today = dates::get_today()
+  let req = http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/fixtures?status=NS&timezone=America/New_York&date={today}",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+      "Accept": "application/json",
+    ],
+  }
+
+  let res = try http::send(req) -> err {
+    io::print("Error fetching today's fixtures: {err}")
+    List::new<Fixture>()
+  }
+
+  // todo: follow paginations
+  let body = decode::json(res.body)
+  try decode::run(body, decode::field("response", decode::list(decode_fixture))) -> errs {
+    io::print("Error decoding body.response: {errs.at(0)}")
+    List::new<Fixture>()
+  }
 }

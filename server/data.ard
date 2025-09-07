@@ -5,18 +5,17 @@ use ard/io
 use ard/sqlite
 
 use maestro/db
+use maestro/predictions
 use maestro/matches
 use maestro/teams
 
 fn sync() {
   let conn = db::connect()
-  // db.exec("create table if not exists seasons (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
-  //   .expect("Failed to create seasons table")
 
   async::start(fn() {
     while {
-      teams::sync(conn)
-      async::sleep(duration::from_hours(1000))
+      predictions::find_good_odds()
+      async::sleep(duration::from_hours(2))
     }
   })
 

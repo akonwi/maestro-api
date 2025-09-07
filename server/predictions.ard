@@ -1,10 +1,15 @@
-use ard/env
 use ard/decode
+use ard/env
+use ard/fs
 use ard/http
+use ard/io
+use ard/json
 use ard/maybe
 use ard/sqlite
 
+use maestro/config
 use maestro/matches
+use maestro/odds
 use maestro/teams
 
 // --- Predictions come from API-Football
@@ -16,6 +21,7 @@ struct Winner {
 }
 
 struct Prediction {
+  // predictions
   advice: Str?,
   winner: Winner?,
   win_or_draw: Bool?,
@@ -53,15 +59,11 @@ private fn decode_entry(data: Dynamic) Prediction![decode::Error] {
 }
 
 fn get(fixture_id: Int) Prediction!Str {
-  let api_key = match env::get("API_KEY") {
-    key => key,
-    _ => panic("API_KEY environment variable not set")
-  }
   let res = try http::send(http::Request{
     method: http::Method::Get,
     url: "https://v3.football.api-sports.io/predictions?fixture={fixture_id}",
     headers: [
-      "x-rapidapi-key": api_key,
+      "x-rapidapi-key": config::api_key(),
       "Accept": "application/json",
     ],
   })
@@ -149,4 +151,138 @@ fn get_analysis(db: sqlite::Database, fixture_id: Int) Analysis!Str {
     home_confidence: calculate_confidence(attacking: home, defending: away),
     away_confidence: calculate_confidence(attacking: away, defending: home),
   })
+}
+
+// 2. calc over/under averages
+// 3. filter out bets aligned with calculations and over -150 odds
+
+
+struct Stats {
+  avg_gf: Float,
+  avg_ga: Float,
+}
+
+struct TeamStats {
+  home: Stats,
+  away: Stats,
+}
+
+fn decode_stats(data: Dynamic) Stats![decode::Error] {
+  let gf = try decode::run(data,
+    decode::field(
+      "league",
+      decode::field("goals",
+        decode::field("for", decode::field("average", decode::field("total", decode::string)))
+      )
+    )
+  )
+  let ga = try decode::run(data,
+    decode::field(
+      "league",
+      decode::field("goals",
+        decode::field("against", decode::field("average", decode::field("total", decode::string)))
+      )
+    )
+  )
+
+  Result::ok(Stats{
+    avg_gf: Float::from_str(gf).or(0.0),
+    avg_ga: Float::from_str(ga).or(0.0),
+  })
+}
+
+fn decode_team_stats(data: Dynamic) TeamStats![decode::Error] {
+  let home = try decode::run(data, decode::field("teams", decode::field("home", decode_stats)))
+  let away = try decode::run(data, decode::field("teams", decode::field("away", decode_stats)))
+
+  Result::ok(TeamStats{
+    home: home,
+    away: away,
+  })
+}
+
+fn get_stats(fixture_id: Int) TeamStats!Str {
+  let res = try http::send(http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/predictions?fixture={fixture_id}",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+      "Accept": "application/json",
+    ],
+  })
+
+  let body = decode::json(res.body)
+  let stats = try decode::run(
+    body,
+    decode::field("response", decode::list(decode_team_stats))
+  ) -> errs {
+    Result::err(errs.at(0).to_str())
+  }
+  io::print("got stats: {fixture_id}")
+  for s in stats {
+    io::print("-- home: {s.home.avg_gf}")
+    io::print("-- away: {s.away.avg_gf}")
+  }
+  io::print("ok: size={stats.size()}")
+  Result::ok(stats.at(0))
+}
+
+struct FixturePicks {
+  fixture: matches::Fixture,
+  stats: [odds::Stat]
+}
+
+let good_odds_file = "./good_odds.json"
+
+fn find_good_odds() {
+  mut entries: [FixturePicks] = []
+  for fixture in matches::find_today() {
+    mut entry = FixturePicks{
+      fixture: fixture,
+      stats: [],
+    }
+    match get_stats(fixture.id) {
+      ok(stats) => {
+        // find odds, if team over/under makes sense, save it
+        let bets = match odds::get(fixture.id) {
+          ok(all_odds) => {
+            for odd in all_odds {
+              // total goals - home
+              if odd.id == 16 {
+                mut lines: [odds::Line] = []
+                for line in odd.values {
+                  if line.name == "Over 1.5" and stats.home.avg_gf > 1.5 {
+                    lines.push(line)
+                  }
+                  if line.name == "Over 2.5" and stats.home.avg_gf > 2.0 {
+                    lines.push(line)
+                  }
+                }
+                if lines.size() > 0 {
+                  entry.stats.push(odds::Stat{
+                    id: odd.id,
+                    name: odd.name,
+                    values: lines
+                  })
+                }
+              }
+            }
+          },
+          err => io::print("Error getting odds for fixture {fixture.id}: {err}")
+        }
+      },
+      err => io::print("Error getting prediction for fixture {fixture.id}: {err}")
+    }
+
+    if entry.stats.size() > 0 {
+      entries.push(entry)
+    }
+  }
+
+  io::print("Found {entries.size()} good bets")
+
+  match json::encode(entries) {
+    ok(content) => fs::write(good_odds_file, content),
+    err => io::print("Error writing to {good_odds_file}: {err}")
+  }
 }
