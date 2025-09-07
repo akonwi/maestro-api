@@ -7,7 +7,7 @@ struct League {
   code: Str,
 }
 
-fn decode_league(data: decode::Dynamic) League![decode::Error] {
+fn decode_league(data: Dynamic) League![decode::Error] {
   let id = try decode::run(data, decode::field("id", decode::int))
   let name = try decode::run(data, decode::field("name", decode::string))
   let code = try decode::run(data, decode::field("code", decode::string))

@@ -8,6 +8,7 @@ struct Line {
 }
 
 struct Stat {
+  id: Int,
   name: Str,
   values: [Line]
 }
@@ -21,21 +22,13 @@ fn to_american(decimal_odd: Float) Int {
   }
 }
 
-// create a decoder that takes the first in the list
-fn first(as: fn(decode::Dynamic) $T![decode::Error]) fn(decode::Dynamic) $T![decode::Error] {
-	fn(data: decode::Dynamic) $T![decode::Error] {
-		let list = try decode::run(data, decode::list(as))
-		Result::ok(list.at(0))
-	}
-}
-
-fn int_to_string(data: decode::Dynamic) Str![decode::Error] {
-  let val = try decode::as_int(data)
+fn int_to_string(data: Dynamic) Str![decode::Error] {
+  let val = try decode::run(data, decode::int)
   Result::ok(val.to_str())
 }
 
-fn decode_line(data: decode::Dynamic) Line![decode::Error] {
-  let name = try decode::run(data, decode::field("value", decode::one_of([decode::string, int_to_string])))
+fn decode_line(data: Dynamic) Line![decode::Error] {
+  let name = try decode::run(data, decode::field("value", decode::one_of(decode::string, [int_to_string])))
   let odd_str = try decode::run(data, decode::field("odd", decode::string))
   let dec_odd = Float::from_str(odd_str).or(0.0)
   let american_odd = to_american(dec_odd)
@@ -46,7 +39,8 @@ fn decode_line(data: decode::Dynamic) Line![decode::Error] {
   })
 }
 
-fn decode_bet(data: decode::Dynamic) Stat![decode::Error] {
+fn decode_bet(data: Dynamic) Stat![decode::Error] {
+  let id = try decode::run(data, decode::field("id", decode::int))
   let name = try decode::run(data, decode::field("name", decode::string))
   let values = try decode::run(data, decode::field("values", decode::list(decode_line)))
 
@@ -59,18 +53,18 @@ fn decode_bet(data: decode::Dynamic) Stat![decode::Error] {
   }
 
   Result::ok(Stat{
+    id: id,
     name: name,
     values: juicy_lines,
   })
 }
 
-fn decode_odds_data(data: decode::Dynamic) [Stat]![decode::Error] {
+fn decode_odds_data(data: Dynamic) [Stat]![decode::Error] {
   // Extract response[0].bookmakers[0].bets[0].name
   let bets = try decode::run(data,
     decode::field("response",
-      first(
-        decode::field("bookmakers",
-          first(decode::field("bets", decode::list(decode_bet)))
+      decode::at(0, decode::field("bookmakers",
+          decode::at(0, decode::field("bets", decode::list(decode_bet)))
         )
       )
     )

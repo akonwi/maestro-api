@@ -12,7 +12,7 @@ struct Bet {
   result: Str,
 }
 
-fn decode_bet(data: decode::Dynamic) Bet![decode::Error] {
+fn decode_bet(data: Dynamic) Bet![decode::Error] {
   let id = try decode::run(data, decode::field("id", decode::int))
   let match_id = try decode::run(data, decode::field("match_id", decode::int))
   let name = try decode::run(data, decode::field("name", decode::string))
@@ -68,7 +68,7 @@ fn get_overview(db: sqlite::Database) Overview!Str {
   // Calculate total payout
 	let	winning_bet_rows = try db.query("SELECT amount, odds FROM bets WHERE result = 'win'")
 
-	let payouts = try decode::run(winning_bet_rows, decode::list(fn(data: decode::Dynamic) Float![decode::Error] {
+	let payouts = try decode::run(winning_bet_rows, decode::list(fn(data: Dynamic) Float![decode::Error] {
 	  let amount = try decode::run(data, decode::field("amount", decode::float))
 	  let odds = try decode::run(data, decode::field("odds", decode::int))
 
@@ -119,7 +119,7 @@ fn catch(errs: [decode::Error]) Bet!Str {
 }
 
 // todo: use a union for the error type - could be bad inputs or db error
-fn create(db: sqlite::Database, input: decode::Dynamic) Bet!Str {
+fn create(db: sqlite::Database, input: Dynamic) Bet!Str {
   let match_id = try decode::run(input, decode::field("match_id", decode::int)) -> catch
   let name = try decode::run(input, decode::field("name", decode::string)) -> catch
   let amount = try decode::run(input, decode::field("amount", decode::float)) -> catch
@@ -155,7 +155,7 @@ fn create(db: sqlite::Database, input: decode::Dynamic) Bet!Str {
 }
 
 // currently only supporting changing the result
-fn update(db: sqlite::Database, id: Int, input: decode::Dynamic) Void!Str {
+fn update(db: sqlite::Database, id: Int, input: Dynamic) Void!Str {
   let result = try decode::run(input, decode::field("result", decode::string)) -> errs {
     io::print("Error parsing result to update bet: {errs.at(0)}")
     Result::err(message: errs.at(0).to_str())

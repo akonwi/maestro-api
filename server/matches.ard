@@ -18,7 +18,7 @@ struct Match {
   winner_id: Int?,
 }
 
-fn decode_match(row: decode::Dynamic) Match![decode::Error] {
+fn decode_match(row: Dynamic) Match![decode::Error] {
   let id = try decode::run(row, decode::field("id", decode::int))
   let date = try decode::run(row, decode::field("date", decode::string))
   let timestamp = try decode::run(row, decode::field("timestamp", decode::int))
@@ -45,7 +45,7 @@ fn decode_match(row: decode::Dynamic) Match![decode::Error] {
 }
 
 // fixtures come from API-Football
-fn decode_fixture_entry(row: decode::Dynamic) Match![decode::Error] {
+fn decode_fixture_entry(row: Dynamic) Match![decode::Error] {
   let id = try decode::run(row, decode::field("fixture", decode::field("id", decode::int)))
   let date = try decode::run(row, decode::field("fixture", decode::field("date", decode::string)))
   let timestamp = try decode::run(row, decode::field("fixture", decode::field("timestamp", decode::int)))
@@ -109,8 +109,8 @@ fn fetch_season(league_id: Int, season: Int) [Match] {
 }
 
 // turn into values for the database
-fn to_values(m: Match) [Str:decode::Dynamic] {
-  mut values: [Str: decode::Dynamic] = [
+fn to_values(m: Match) [Str:Dynamic] {
+  mut values: [Str: Dynamic] = [
     "id": decode::from_int(m.id),
     "date": decode::from_str(m.date),
     "timestamp": decode::from_int(m.timestamp),

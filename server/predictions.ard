@@ -23,7 +23,7 @@ struct Prediction {
   away_goals: Str,
 }
 
-private fn decode_winner(data: decode::Dynamic) Winner![decode::Error] {
+private fn decode_winner(data: Dynamic) Winner![decode::Error] {
   let winner_id = try decode::run(data, decode::field("id", decode::int))
   let winner_name = try decode::run(data,  decode::field("name", decode::string))
   let winner_comment = try decode::run(data,  decode::field("comment", decode::nullable(decode::string)))
@@ -35,7 +35,7 @@ private fn decode_winner(data: decode::Dynamic) Winner![decode::Error] {
   })
 }
 
-private fn decode_entry(data: decode::Dynamic) Prediction![decode::Error] {
+private fn decode_entry(data: Dynamic) Prediction![decode::Error] {
   let advice = try decode::run(data, decode::field("advice", decode::nullable(decode::string)))
   let winner = try decode::run(data, decode::field("winner", decode::nullable(decode_winner)))
   let win_or_draw = try decode::run(data, decode::field("win_or_draw", decode::nullable(decode::bool)))

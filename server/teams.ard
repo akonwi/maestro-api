@@ -11,7 +11,7 @@ struct Team {
 	code: Str?,
 }
 
-fn decode_team(data: decode::Dynamic) Team![decode::Error] {
+fn decode_team(data: Dynamic) Team![decode::Error] {
   let id = try decode::run(data, decode::field("id", decode::int))
   let name = try decode::run(data, decode::field("name", decode::string))
   let code = try decode::run(data, decode::field("code", decode::nullable(decode::string)))
@@ -48,7 +48,7 @@ fn get_in_matches(db: sqlite::Database, ids: [Int]) [Int:Str]!Str {
   ")
 
   struct Row { id: Int, name: Str }
-  let decode_row = fn(row: decode::Dynamic) Row![decode::Error] {
+  let decode_row = fn(row: Dynamic) Row![decode::Error] {
     let id = try decode::run(row, decode::field("id", decode::int))
     let name = try decode::run(row, decode::field("name", decode::string))
     Result::ok(Row{id:id, name:name})
@@ -195,7 +195,7 @@ fn get_comparison(db: sqlite::Database, home_id: Int, away_id: Int) Comparison!S
   })
 }
 
-fn decode_from_api(data: decode::Dynamic) Team![decode::Error] {
+fn decode_from_api(data: Dynamic) Team![decode::Error] {
   let id = try decode::run(data, decode::field("id", decode::int))
   let name = try decode::run(data, decode::field("name", decode::string))
   let code = try decode::run(data, decode::field("code", decode::nullable(decode::string)))
@@ -207,7 +207,7 @@ fn decode_from_api(data: decode::Dynamic) Team![decode::Error] {
   })
 }
 
-fn to_values(team: Team) [Str:decode::Dynamic] {
+fn to_values(team: Team) [Str:Dynamic] {
   mut values = [
     "id": decode::from_int(team.id),
     "name": decode::from_str(team.name),
@@ -219,7 +219,7 @@ fn to_values(team: Team) [Str:decode::Dynamic] {
   values
 }
 
-fn decode_and_save(db: sqlite::Database, data: decode::Dynamic) Bool![decode::Error] {
+fn decode_and_save(db: sqlite::Database, data: Dynamic) Bool![decode::Error] {
   let teams = try decode::run(data,
     decode::field("response",
       decode::list(decode::field("team", decode_from_api))
