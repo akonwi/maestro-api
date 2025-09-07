@@ -61,17 +61,23 @@ fn decode_bet(data: Dynamic) Stat![decode::Error] {
 }
 
 fn decode_odds_data(data: Dynamic) [Stat]![decode::Error] {
-  // Extract response[0].bookmakers[0].bets[0].name
-  let bets = try decode::run(data,
-    decode::field("response",
-      decode::at(0, decode::field("bookmakers",
-          decode::at(0, decode::field("bets", decode::list(decode_bet)))
+  let count = try decode::run(data, decode::field("results", decode::int))
+  match count {
+    0 => Result::ok(List::new<Stat>()),
+    _ => {
+      // Extract response[0].bookmakers[0].bets[0].name
+      let bets = try decode::run(data,
+        decode::field("response",
+          decode::at(0, decode::field("bookmakers",
+              decode::at(0, decode::field("bets", decode::list(decode_bet)))
+            )
+          )
         )
       )
-    )
-  )
 
-  Result::ok(bets)
+      Result::ok(bets)
+    },
+  }
 }
 
 fn get(fixture_id: Int) [Stat]!Str {
@@ -88,7 +94,7 @@ fn get(fixture_id: Int) [Stat]!Str {
     ],
   })
 
-  let body = decode::json(res.body)
+  let body = try decode::from_json(res.body) -> err { Result::err("Invalid JSON response: {err}") }
   let stats = try decode_odds_data(body) -> errs {
     io::print("Error decoding odds: {errs.at(0)}")
     Result::ok(List::new<Stat>())
