@@ -232,7 +232,7 @@ struct FixturePicks {
   stats: [odds::Stat]
 }
 
-fn pick_team_goal_lines(odd: odds::Stat, stats: Stats) [odds::Line]  {
+fn pick_team_goal_lines(odd: odds::Stat, stats: Stats, mut entry: FixturePicks) {
   mut lines: [odds::Line] = []
   for line in odd.values {
     if line.name == "Over 1.5" and stats.avg_gf > 1.5 {
@@ -243,7 +243,35 @@ fn pick_team_goal_lines(odd: odds::Stat, stats: Stats) [odds::Line]  {
     }
   }
 
-  lines
+  if lines.size() > 0 {
+    entry.stats.push(odds::Stat{
+      id: odd.id,
+      name: odd.name,
+      values: lines
+    })
+  }
+}
+
+fn pick_cleansheet_lines(odd: odds::Stat, stats: Stats, mut entry: FixturePicks) {
+  mut lines: [odds::Line] = []
+  for line in odd.values {
+    if line.name == "Yes" and stats.avg_ga > 1.5 {
+      lines.push(line)
+    }
+
+    // be extremely conservative
+    if line.name == "No" and stats.avg_ga < 1.0 {
+      lines.push(line)
+    }
+  }
+
+  if lines.size() > 0 {
+    entry.stats.push(odds::Stat{
+      id: odd.id,
+      name: odd.name,
+      values: lines
+    })
+  }
 }
 
 let good_odds_file = "./good_odds.json"
@@ -251,49 +279,46 @@ let good_odds_file = "./good_odds.json"
 fn find_good_odds() {
   mut entries: [FixturePicks] = []
   for fixture in matches::find_today() {
-    mut entry = FixturePicks{
-      fixture: fixture,
-      stats: [],
-    }
     match get_stats(fixture.id) {
       ok(stats) => {
+        mut entry = FixturePicks{
+          fixture: fixture,
+          stats: [],
+        }
+
         // find odds, if team over/under makes sense, save it
         let bets = match odds::get(fixture.id) {
           ok(all_odds) => {
             for odd in all_odds {
               // total goals - home
               if odd.id == 16 {
-                let lines = pick_team_goal_lines(odd, stats.home)
-                if lines.size() > 0 {
-                  entry.stats.push(odds::Stat{
-                    id: odd.id,
-                    name: odd.name,
-                    values: lines
-                  })
-                }
+                pick_team_goal_lines(odd, stats.home, entry)
               }
 
               // total goals - away
               if odd.id == 17 {
-                let lines = pick_team_goal_lines(odd, stats.away)
-                if lines.size() > 0 {
-                  entry.stats.push(odds::Stat{
-                    id: odd.id,
-                    name: odd.name,
-                    values: lines
-                  })
-                }
+                pick_team_goal_lines(odd, stats.away, entry)
+              }
+
+              // cleansheet - home
+              if odd.id == 27 {
+                pick_cleansheet_lines(odd, stats.home, entry)
+              }
+
+              // cleansheet - away
+              if odd.id == 28 {
+                pick_cleansheet_lines(odd, stats.away, entry)
               }
             }
           },
           err => io::print("Error getting odds for fixture {fixture.id}: {err}")
         }
+
+        if entry.stats.size() > 0 {
+          entries.push(entry)
+        }
       },
       err => io::print("Error getting prediction for fixture {fixture.id}: {err}")
-    }
-
-    if entry.stats.size() > 0 {
-      entries.push(entry)
     }
   }
 
