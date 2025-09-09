@@ -232,6 +232,20 @@ struct FixturePicks {
   stats: [odds::Stat]
 }
 
+fn pick_team_goal_lines(odd: odds::Stat, stats: Stats) [odds::Line]  {
+  mut lines: [odds::Line] = []
+  for line in odd.values {
+    if line.name == "Over 1.5" and stats.avg_gf > 1.5 {
+      lines.push(line)
+    }
+    if line.name == "Over 2.5" and stats.avg_gf > 2.0 {
+      lines.push(line)
+    }
+  }
+
+  lines
+}
+
 let good_odds_file = "./good_odds.json"
 
 fn find_good_odds() {
@@ -249,15 +263,19 @@ fn find_good_odds() {
             for odd in all_odds {
               // total goals - home
               if odd.id == 16 {
-                mut lines: [odds::Line] = []
-                for line in odd.values {
-                  if line.name == "Over 1.5" and stats.home.avg_gf > 1.5 {
-                    lines.push(line)
-                  }
-                  if line.name == "Over 2.5" and stats.home.avg_gf > 2.0 {
-                    lines.push(line)
-                  }
+                let lines = pick_team_goal_lines(odd, stats.home)
+                if lines.size() > 0 {
+                  entry.stats.push(odds::Stat{
+                    id: odd.id,
+                    name: odd.name,
+                    values: lines
+                  })
                 }
+              }
+
+              // total goals - away
+              if odd.id == 17 {
+                let lines = pick_team_goal_lines(odd, stats.away)
                 if lines.size() > 0 {
                   entry.stats.push(odds::Stat{
                     id: odd.id,
