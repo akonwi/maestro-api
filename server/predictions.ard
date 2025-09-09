@@ -158,6 +158,7 @@ fn get_analysis(db: sqlite::Database, fixture_id: Int) Analysis!Str {
 
 
 struct Stats {
+  games: Int,
   avg_gf: Float,
   avg_ga: Float,
 }
@@ -168,6 +169,15 @@ struct TeamStats {
 }
 
 fn decode_stats(data: Dynamic) Stats![decode::Error] {
+  let num_games = try decode::run(data,
+    decode::field(
+      "league",
+      decode::field("fixtures",
+        decode::field("played", decode::field("total", decode::int))
+      )
+    )
+  )
+
   let gf = try decode::run(data,
     decode::field(
       "league",
@@ -186,6 +196,7 @@ fn decode_stats(data: Dynamic) Stats![decode::Error] {
   )
 
   Result::ok(Stats{
+    games: num_games,
     avg_gf: Float::from_str(gf).or(0.0),
     avg_ga: Float::from_str(ga).or(0.0),
   })
@@ -218,12 +229,6 @@ fn get_stats(fixture_id: Int) TeamStats!Str {
   ) -> errs {
     Result::err(errs.at(0).to_str())
   }
-  io::print("got stats: {fixture_id}")
-  for s in stats {
-    io::print("-- home: {s.home.avg_gf}")
-    io::print("-- away: {s.away.avg_gf}")
-  }
-  io::print("ok: size={stats.size()}")
   Result::ok(stats.at(0))
 }
 
@@ -255,12 +260,12 @@ fn pick_team_goal_lines(odd: odds::Stat, stats: Stats, mut entry: FixturePicks) 
 fn pick_cleansheet_lines(odd: odds::Stat, stats: Stats, mut entry: FixturePicks) {
   mut lines: [odds::Line] = []
   for line in odd.values {
-    if line.name == "Yes" and stats.avg_ga > 1.5 {
+    if line.name == "No" and stats.avg_ga > 1.5 {
       lines.push(line)
     }
 
     // be extremely conservative
-    if line.name == "No" and stats.avg_ga < 1.0 {
+    if line.name == "Yes" and stats.avg_ga < 1.0 {
       lines.push(line)
     }
   }
@@ -281,41 +286,43 @@ fn find_good_odds() {
   for fixture in matches::find_today() {
     match get_stats(fixture.id) {
       ok(stats) => {
-        mut entry = FixturePicks{
-          fixture: fixture,
-          stats: [],
-        }
+        if stats.home.games > 7 {
+          mut entry = FixturePicks{
+            fixture: fixture,
+            stats: [],
+          }
 
-        // find odds, if team over/under makes sense, save it
-        let bets = match odds::get(fixture.id) {
-          ok(all_odds) => {
-            for odd in all_odds {
-              // total goals - home
-              if odd.id == 16 {
-                pick_team_goal_lines(odd, stats.home, entry)
+          // find odds, if team over/under makes sense, save it
+          let bets = match odds::get(fixture.id) {
+            ok(all_odds) => {
+              for odd in all_odds {
+                // total goals - home
+                if odd.id == 16 {
+                  pick_team_goal_lines(odd, stats.home, entry)
+                }
+
+                // total goals - away
+                if odd.id == 17 {
+                  pick_team_goal_lines(odd, stats.away, entry)
+                }
+
+                // cleansheet - home
+                if odd.id == 27 {
+                  pick_cleansheet_lines(odd, stats.home, entry)
+                }
+
+                // cleansheet - away
+                if odd.id == 28 {
+                  pick_cleansheet_lines(odd, stats.away, entry)
+                }
               }
+            },
+            err => io::print("Error getting odds for fixture {fixture.id}: {err}")
+          }
 
-              // total goals - away
-              if odd.id == 17 {
-                pick_team_goal_lines(odd, stats.away, entry)
-              }
-
-              // cleansheet - home
-              if odd.id == 27 {
-                pick_cleansheet_lines(odd, stats.home, entry)
-              }
-
-              // cleansheet - away
-              if odd.id == 28 {
-                pick_cleansheet_lines(odd, stats.away, entry)
-              }
-            }
-          },
-          err => io::print("Error getting odds for fixture {fixture.id}: {err}")
-        }
-
-        if entry.stats.size() > 0 {
-          entries.push(entry)
+          if entry.stats.size() > 0 {
+            entries.push(entry)
+          }
         }
       },
       err => io::print("Error getting prediction for fixture {fixture.id}: {err}")
