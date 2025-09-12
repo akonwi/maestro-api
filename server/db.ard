@@ -44,4 +44,10 @@ fn init(db: sqlite::Database) {
       league_id INTEGER NOT NULL
     )"
   ).expect("Failed to create teams table")
+  db.exec(
+    "create table if not exists juice (
+      id TEXT PRIMARY KEY,
+      raw_data TEXT
+    )"
+  )
 }

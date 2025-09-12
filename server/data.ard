@@ -12,15 +12,9 @@ use maestro/teams
 fn sync() {
   let conn = db::connect()
 
-  async::start(fn() {
-    while {
-      predictions::find_good_odds()
-      async::sleep(duration::from_hours(2))
-    }
-  })
-
   while {
     matches::sync(conn)
+    predictions::find_good_odds(conn)
     async::sleep(duration::from_hours(2))
   }
 

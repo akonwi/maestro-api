@@ -1,3 +1,4 @@
+use ard/dates
 use ard/decode
 use ard/env
 use ard/fs
@@ -279,9 +280,7 @@ fn pick_cleansheet_lines(odd: odds::Stat, stats: Stats, mut entry: FixturePicks)
   }
 }
 
-let good_odds_file = "./good_odds.json"
-
-fn find_good_odds() {
+fn find_good_odds(db: sqlite::Database) {
   mut entries: [FixturePicks] = []
   for fixture in matches::find_today() {
     match get_stats(fixture.id) {
@@ -332,7 +331,23 @@ fn find_good_odds() {
   io::print("Found {entries.size()} good bets")
 
   match json::encode(entries) {
-    ok(content) => fs::write(good_odds_file, content),
-    err => io::print("Error writing to {good_odds_file}: {err}")
+    ok(content) => {
+      let today = dates::get_today()
+      io::print("Saving juice: {today}")
+      match db.upsert("juice", "id = '{today}'", ["id": decode::from_str(today), "raw_data": decode::from_str(content)]) {
+        ok => {},
+        err => io::print("Error saving juice: {err}")
+      }
+    },
+    err => io::print("Error encoding juice data to JSON: {err}")
   }
+}
+
+fn get_juice(db: sqlite::Database) Str!Str {
+  let row = try db.first("select * from juice where id = '{dates::get_today()}';")
+  let raw = try decode::run(row, decode::field("raw_data", decode::string)) -> errs {
+    Result::err(errs.at(0).to_str())
+  }
+
+  Result::ok(raw)
 }

@@ -84,6 +84,16 @@ fn main() {
   http::serve(
     port: port,
     handlers: [
+      "/juice": fn(req: http::Request) http::Response {
+        match req.method {
+          http::Method::Get => {
+            let body = try predictions::get_juice(conn) -> internal_error
+            http::Response{status: 200, headers: res_headers, body: body}
+          },
+          _ => not_found
+        }
+      },
+
       "/bets": fn(req: http::Request) http::Response {
         match req.method {
           http::Method::Get => {
