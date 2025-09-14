@@ -30,9 +30,12 @@ struct Prediction {
   away_goals: Str,
 }
 
+let decode_id = decode::field("id", decode::int)
+let decode_name = decode::field("name", decode::string)
+
 private fn decode_winner(data: Dynamic) Winner![decode::Error] {
-  let winner_id = try decode::run(data, decode::field("id", decode::int))
-  let winner_name = try decode::run(data,  decode::field("name", decode::string))
+  let winner_id = try decode_id(data)
+  let winner_name = try decode_name(data)
   let winner_comment = try decode::run(data,  decode::field("comment", decode::nullable(decode::string)))
 
   Result::ok(Winner{
@@ -136,22 +139,134 @@ fn calculate_confidence(attacking: teams::Snapshot, defending: teams::Snapshot) 
   }
 }
 
-fn get_analysis(db: sqlite::Database, fixture_id: Int) Analysis!Str {
-  let fixture = try matches::get(db, fixture_id)
-  let home = try teams::get_snapshot(db, fixture.home_team_id)
-  let away = try teams::get_snapshot(db, fixture.away_team_id)
+struct Snapshot {
+	id: Int,
+	name: Str,
+	num_games: Int,
+	wins: Int,
+	losses: Int,
+	draws:  Int,
 
-  mut recs = BetRecommendations{}
+	goals_against: Int,
+	goals_for: Int,
+	goals_diff: Int,
+	xgf: Float,
+	xga: Float,
+	leakiness: Float,
 
-  recs.home_goals = get_team_goal_line(home.xgf, away.xga)
-  recs.away_goals = get_team_goal_line(away.xgf, home.xga)
+	cleansheets: Int,
+	one_conceded: Int,
 
-  Result::ok(Analysis{
-    match_id: fixture_id,
-    recommendations: recs,
-    home_confidence: calculate_confidence(attacking: home, defending: away),
-    away_confidence: calculate_confidence(attacking: away, defending: home),
+	// could be presented as +1.5
+	two_plus_conceded: Int,
+
+	win_rate: Float,
+}
+
+struct Comparison {
+  home: Snapshot,
+  away: Snapshot,
+}
+
+fn get_comparison(fixture_id: Int) Comparison!Str {
+  let res = try http::send(http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/predictions?fixture={fixture_id}",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+      "Accept": "application/json",
+    ],
   })
+
+  fn decode_stats(data: Dynamic) teams::Snapshot![decode::Error] {
+    let id = try decode_id(data)
+    let name = try decode_name(data)
+    let league_data = try decode::extract_field(data, "league") -> found {
+      Result::err([decode::Error{
+        expected: "Field",
+        found: found,
+        path: ["league"]
+      }])
+    }
+    let num_played = try decode::run(
+      data,
+      decode::field("league", decode::field("fixtures", decode::field("played", decode::field("total", decode::int))))
+    )
+    let wins = try decode::run(
+      data,
+      decode::field("league", decode::field("fixtures", decode::field("wins", decode::field("total", decode::int))))
+    )
+    let losses = try decode::run(
+      data,
+      decode::field("league", decode::field("fixtures", decode::field("loses", decode::field("total", decode::int))))
+    )
+    let draws = try decode::run(
+      data,
+      decode::field("league", decode::field("fixtures", decode::field("draws", decode::field("total", decode::int))))
+    )
+    let goals_against = try decode::run(
+      data,
+      decode::field(
+        "league",
+        decode::field("goals", decode::field("against", decode::field("total", decode::field("total", decode::int))))
+      )
+    )
+    let xga = Float::from_int(goals_against) / Float::from_int(num_played)
+    let goals_for = try decode::run(
+      data,
+      decode::field(
+        "league",
+        decode::field("goals", decode::field("for", decode::field("total", decode::field("total", decode::int))))
+      ),
+    )
+    let xgf = Float::from_int(goals_for) / Float::from_int(num_played)
+    let cleansheets = try decode::run(data, decode::field("league", decode::field("clean_sheet", decode::field("total", decode::int))))
+    let at_least_1_against = try decode::run(
+      data,
+      decode::field(
+        "league",
+        decode::field("goals", decode::field("against", decode::field("under_over", decode::field("0.5", decode::field("over", decode::int)))))
+      )
+    )
+    let over_1_against = try decode::run(league_data, decode::path(["goals", "against", "under_over", "1.5", "over"], decode::int))
+    let one_conceded = at_least_1_against - over_1_against
+    let two_plus_conceded = over_1_against
+
+    Result::ok(Snapshot{
+      id: id,
+      name: name,
+      num_games: num_played,
+      wins: wins,
+      losses: losses,
+      draws: draws,
+      goals_against: goals_against,
+      xga: xga,
+      goals_for: goals_for,
+      xgf: xgf,
+      goals_diff: goals_for - goals_against,
+      cleansheets: cleansheets,
+      one_conceded: one_conceded,
+      two_plus_conceded: two_plus_conceded,
+      leakiness: Float::from_int(two_plus_conceded) / Float::from_int(num_played) * 100.0,
+      win_rate: Float::from_int(wins) / Float::from_int(num_played),
+    })
+  }
+
+  fn decode_comparison(data: Dynamic) Comparison![decode::Error] {
+    let home = try decode::run(data, decode::field("home", decode_stats))
+    let away = try decode::run(data, decode::field("away", decode_stats))
+
+    Result::ok(Comparison{
+      home: home,
+      away: away,
+    })
+  }
+
+  let body = try decode::from_json(res.body)
+  let comparison = try decode::run(body, decode::field("response", decode::at(0, decode::field("teams", decode_comparison)))) -> errs {
+    Result::err(errs.at(0).to_str())
+  }
+  Result::ok(comparison)
 }
 
 // 2. calc over/under averages

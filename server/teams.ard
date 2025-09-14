@@ -87,6 +87,8 @@ struct Snapshot {
 
 	cleansheets: Int,
 	one_conceded: Int,
+
+	// could be presented as +1.5
 	two_plus_conceded: Int,
 
 	win_rate: Float,

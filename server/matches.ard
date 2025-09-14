@@ -195,6 +195,33 @@ fn get(db: sqlite::Database, id: Int) Match!Str {
   Result::ok(found)
 }
 
+fn fetch(id: Int) Match!Str {
+  let req = http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/fixtures?id={id}",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+      "Accept": "application/json",
+    ],
+  }
+
+  let res = try http::send(req)
+  let body = try decode::from_json(res.body)
+  let count = try decode::run(body, decode::field("results", decode::int)) -> errs {
+    Result::err(errs.at(0).to_str())
+  }
+
+  match count {
+    1 => {
+      let fixture = try decode::run(body, decode::field("response", decode::at(0, decode_fixture_entry))) -> errs {
+        Result::err(errs.at(0).to_str())
+      }
+      Result::ok(fixture)
+    },
+    _ => Result::err("Found {count} fixtures for id {id}")
+  }
+}
+
 struct Team {
   id: Int,
   name: Str,
