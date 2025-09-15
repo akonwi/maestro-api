@@ -286,11 +286,11 @@ fn main() {
                 }
 
                 struct Res {
-                  analysis: predictions::Comparison,
+                  comparison: predictions::Comparison,
                   prediction: predictions::Prediction,
                 }
 
-                match json::encode(Res{ analysis: analysis, prediction: prediction }) {
+                match json::encode(Res{ comparison: analysis, prediction: prediction }) {
                   ok(body) => http::Response{status:200, body:body, headers:res_headers},
                   err => internal_error(err)
                 }
