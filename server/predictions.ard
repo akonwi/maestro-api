@@ -16,7 +16,6 @@ use maestro/teams
 let decode_id = decode::field("id", decode::int)
 let decode_name = decode::field("name", decode::string)
 
-
 // Get naive/conservative base line
 private fn get_team_goal_line(xgf: Float, xga: Float) Float {
   let xg = (xgf + xga) / 2.0
@@ -72,46 +71,16 @@ fn get_comparison(fixture_id: Int) Comparison!Str {
         path: ["league"]
       }])
     }
-    let num_played = try decode::run(
-      data,
-      decode::field("league", decode::field("fixtures", decode::field("played", decode::field("total", decode::int))))
-    )
-    let wins = try decode::run(
-      data,
-      decode::field("league", decode::field("fixtures", decode::field("wins", decode::field("total", decode::int))))
-    )
-    let losses = try decode::run(
-      data,
-      decode::field("league", decode::field("fixtures", decode::field("loses", decode::field("total", decode::int))))
-    )
-    let draws = try decode::run(
-      data,
-      decode::field("league", decode::field("fixtures", decode::field("draws", decode::field("total", decode::int))))
-    )
-    let goals_against = try decode::run(
-      data,
-      decode::field(
-        "league",
-        decode::field("goals", decode::field("against", decode::field("total", decode::field("total", decode::int))))
-      )
-    )
+    let num_played = try decode::run(league_data, decode::path(["fixtures", "played", "total"], decode::int))
+    let wins = try decode::run(league_data, decode::path(["fixtures", "wins", "total"], decode::int))
+    let losses = try decode::run(league_data, decode::path(["fixtures", "loses", "total"], decode::int))
+    let draws = try decode::run(league_data, decode::path(["fixtures", "draws", "total"], decode::int))
+    let goals_against = try decode::run(league_data, decode::path(["goals", "against", "total", "total"], decode::int))
     let xga = Float::from_int(goals_against) / Float::from_int(num_played)
-    let goals_for = try decode::run(
-      data,
-      decode::field(
-        "league",
-        decode::field("goals", decode::field("for", decode::field("total", decode::field("total", decode::int))))
-      ),
-    )
+    let goals_for = try decode::run(league_data, decode::path(["goals", "for", "total", "total"], decode::int))
     let xgf = Float::from_int(goals_for) / Float::from_int(num_played)
-    let cleansheets = try decode::run(data, decode::field("league", decode::field("clean_sheet", decode::field("total", decode::int))))
-    let at_least_1_against = try decode::run(
-      data,
-      decode::field(
-        "league",
-        decode::field("goals", decode::field("against", decode::field("under_over", decode::field("0.5", decode::field("over", decode::int)))))
-      )
-    )
+    let cleansheets = try decode::run(league_data, decode::path(["clean_sheet", "total"], decode::int))
+    let at_least_1_against = try decode::run(league_data, decode::path(["goals", "against", "under_over", "0.5", "over"], decode::int))
     let over_1_against = try decode::run(league_data, decode::path(["goals", "against", "under_over", "1.5", "over"], decode::int))
     let one_conceded = at_least_1_against - over_1_against
     let two_plus_conceded = over_1_against
