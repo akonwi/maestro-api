@@ -16,64 +16,11 @@ use maestro/teams
 let decode_id = decode::field("id", decode::int)
 let decode_name = decode::field("name", decode::string)
 
-// --- Analysis is based on my personal algorithm
-struct BetRecommendations {
-  home_goals: Float?,
-  away_goals: Float?,
-  total_goals: Float?,
-  both_teams_to_score: Bool?,
-}
-
-struct ConfidenceScore {
-  score: Float,
-  xg_advantage: Float,
-  quality_gap: Float,
-  def_vuln: Float,
-  label: Str,   // "High", "Medium", "Low"
-}
-
-struct Analysis {
-  match_id: Int,
-  recommendations: BetRecommendations,
-  home_confidence: ConfidenceScore,
-  away_confidence: ConfidenceScore,
-}
 
 // Get naive/conservative base line
 private fn get_team_goal_line(xgf: Float, xga: Float) Float {
   let xg = (xgf + xga) / 2.0
   Float::floor(xg - 0.5) + 0.5
-}
-
-fn calculate_confidence(attacking: teams::Snapshot, defending: teams::Snapshot) ConfidenceScore {
-  let xg_advantage = attacking.xgf - defending.xga
-  let quality_gap = attacking.win_rate - defending.win_rate
-  mut def_vuln = 0.0
-  if defending.leakiness <= 30.0 {
-    def_vuln = 0.1
-  } else if defending.leakiness < 50.0 {
-    def_vuln = 0.3
-  }
-  if defending.leakiness >= 50.0 {
-    def_vuln = 0.5
-  }
-
-  let score = xg_advantage + quality_gap + def_vuln
-
-  mut category = "Low"
-  if score >= 0.75 {
-    category = "High"
-  } else if score >= 0.51 {
-    category = "Medium"
-  }
-
-  ConfidenceScore{
-    score: score,
-    xg_advantage: xg_advantage,
-    quality_gap: quality_gap,
-    def_vuln: def_vuln,
-    label: category
-  }
 }
 
 struct Snapshot {
@@ -208,7 +155,6 @@ fn get_comparison(fixture_id: Int) Comparison!Str {
 
 // 2. calc over/under averages
 // 3. filter out bets aligned with calculations and over -150 odds
-
 
 struct Stats {
   games: Int,
