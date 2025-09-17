@@ -254,16 +254,12 @@ fn main() {
                 let analysis = try predictions::get_comparison(fixture_id) -> err {
                   internal_error("Error getting analysis: {err}")
                 }
-                let prediction = try predictions::get(fixture_id) -> err {
-                  internal_error("Error getting prediction: {err}")
-                }
 
                 struct Res {
                   comparison: predictions::Comparison,
-                  prediction: predictions::Prediction,
                 }
 
-                match json::encode(Res{ comparison: analysis, prediction: prediction }) {
+                match json::encode(Res{ comparison: analysis }) {
                   ok(body) => http::Response{status:200, body:body, headers:res_headers},
                   err => internal_error(err)
                 }

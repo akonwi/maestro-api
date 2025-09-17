@@ -13,71 +13,8 @@ use maestro/matches
 use maestro/odds
 use maestro/teams
 
-// --- Predictions come from API-Football
-
-struct Winner {
-  id: Int,
-  name: Str,
-  comment: Str?,
-}
-
-struct Prediction {
-  // predictions
-  advice: Str?,
-  winner: Winner?,
-  win_or_draw: Bool?,
-  home_goals: Str,
-  away_goals: Str,
-}
-
 let decode_id = decode::field("id", decode::int)
 let decode_name = decode::field("name", decode::string)
-
-private fn decode_winner(data: Dynamic) Winner![decode::Error] {
-  let winner_id = try decode_id(data)
-  let winner_name = try decode_name(data)
-  let winner_comment = try decode::run(data,  decode::field("comment", decode::nullable(decode::string)))
-
-  Result::ok(Winner{
-    id: winner_id,
-    name: winner_name,
-    comment: winner_comment,
-  })
-}
-
-private fn decode_entry(data: Dynamic) Prediction![decode::Error] {
-  let advice = try decode::run(data, decode::field("advice", decode::nullable(decode::string)))
-  let winner = try decode::run(data, decode::field("winner", decode::nullable(decode_winner)))
-  let win_or_draw = try decode::run(data, decode::field("win_or_draw", decode::nullable(decode::bool)))
-  let home_goals = try decode::run(data, decode::field("goals", decode::field("home", decode::nullable(decode::string))))
-  let away_goals = try decode::run(data, decode::field("goals", decode::field("away", decode::nullable(decode::string))))
-
-
-  Result::ok(Prediction{
-    advice: advice,
-    winner: winner,
-    win_or_draw: win_or_draw,
-    home_goals: home_goals.or("0"),
-    away_goals: away_goals.or("0"),
-  })
-}
-
-fn get(fixture_id: Int) Prediction!Str {
-  let res = try http::send(http::Request{
-    method: http::Method::Get,
-    url: "https://v3.football.api-sports.io/predictions?fixture={fixture_id}",
-    headers: [
-      "x-rapidapi-key": config::api_key(),
-      "Accept": "application/json",
-    ],
-  })
-
-  let body = decode::json(res.body)
-  let predictions = try decode::run(body, decode::field("response", decode::list(decode::field("predictions", decode_entry)))) -> errs {
-    Result::err(errs.at(0).to_str())
-  }
-  Result::ok(predictions.at(0))
-}
 
 // --- Analysis is based on my personal algorithm
 struct BetRecommendations {
