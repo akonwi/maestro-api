@@ -50,4 +50,9 @@ fn init(db: sqlite::Database) {
       raw_data TEXT
     )"
   )
+  db.exec("
+    update bets
+    set result = 'lose'
+    where result = 'loss'
+  ")
 }
