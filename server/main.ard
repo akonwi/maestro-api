@@ -86,7 +86,8 @@ fn main() {
       "/juice": fn(req: http::Request) http::Response {
         match req.method {
           http::Method::Get => {
-            let body = try predictions::get_juice(conn) -> internal_error
+            let date = req.query_param("date")
+            let body = try predictions::get_juice(conn, date) -> internal_error
             http::Response{status: 200, headers: res_headers, body: body}
           },
           _ => not_found

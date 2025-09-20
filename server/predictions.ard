@@ -310,11 +310,21 @@ fn find_good_odds(db: sqlite::Database) {
   }
 }
 
-fn get_juice(db: sqlite::Database) Str!Str {
-  let row = try db.first("select * from juice where id = '{dates::get_today()}';")
-  let raw = try decode::run(row, decode::field("raw_data", decode::string)) -> errs {
-    Result::err(errs.at(0).to_str())
+fn get_juice(db: sqlite::Database, date: Str) Str!Str {
+  let id = match date.is_empty() {
+    true => dates::get_today(),
+    false => date
   }
 
-  Result::ok(raw)
+  let row = try db.first("select * from juice where id = '{id}';")
+  match decode::is_void(row) {
+    true => Result::ok("[]"),
+    false => {
+      let raw = try decode::run(row, decode::field("raw_data", decode::string)) -> errs {
+        Result::err(errs.at(0).to_str())
+      }
+
+      Result::ok(raw)
+    },
+  }
 }
