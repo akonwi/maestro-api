@@ -214,32 +214,6 @@ fn main() {
         }
       },
 
-      "/compare": fn(req: http::Request) http::Response {
-        // accepts `home` and `away` ids in query params
-        match req.method {
-          http::Method::Get => {
-            let home_id = Int::from_str(req.query_param("home")).or(-1)
-            let away_id = Int::from_str(req.query_param("away")).or(-1)
-
-            match home_id == -1 or away_id == -1 {
-              true => {
-                mut headers = res_headers
-                headers.drop("Content-Type")
-                http::Response{status: 400, body: "Invalid team id", headers: headers}
-              },
-              false => {
-                let comparison = try teams::get_comparison(db: conn, home_id: home_id, away_id: away_id) -> internal_error
-                match json::encode(comparison) {
-                  ok(body) => http::Response{status:200, body:body, headers:res_headers},
-                  err => internal_error(err)
-                }
-              }
-            }
-          },
-          _ => not_found
-        }
-      },
-
       "/analysis/:matchId": fn(req: http::Request) http::Response {
         match req.method {
           http::Method::Get => {
