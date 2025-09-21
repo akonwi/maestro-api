@@ -118,7 +118,7 @@ fn to_values(team: Team) [Str:Dynamic] {
   values
 }
 
-fn decode_and_save(db: sqlite::Database, data: Dynamic) Bool![decode::Error] {
+fn decode_and_save(db: sqlite::Database, data: Dynamic) Void![decode::Error] {
   let teams = try decode::run(data,
     decode::field("response",
       decode::list(decode::field("team", decode_from_api))
@@ -140,7 +140,7 @@ fn decode_and_save(db: sqlite::Database, data: Dynamic) Bool![decode::Error] {
     }
   }
 
-  Result::ok(true)
+  Result::ok(())
 }
 
 // load teams into the db
@@ -160,9 +160,7 @@ fn sync(db: sqlite::Database) {
       ],
     }
     match http::send(req) {
-      ok(resp) => {
-        decode_and_save(db, decode::json(resp.body))
-      },
+      ok(resp) => decode_and_save(db, decode::json(resp.body)),
       err => io::print("Error fetching teams in league {league_id}: {err}")
     }
 
