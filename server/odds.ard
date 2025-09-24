@@ -1,7 +1,8 @@
 use ard/decode
-use ard/env
 use ard/http
 use ard/io
+
+use maestro/config
 
 struct Line {
   name: Str,
@@ -81,15 +82,11 @@ fn decode_odds_data(data: Dynamic) [Stat]![decode::Error] {
 }
 
 fn get(fixture_id: Int) [Stat]!Str {
-  let api_key = match env::get("API_KEY") {
-    key => key,
-    _ => panic("API_KEY environment variable not set")
-  }
   let res = try http::send(http::Request{
     method: http::Method::Get,
     url: "https://v3.football.api-sports.io/odds?fixture={fixture_id}&bookmaker={8}",
     headers: [
-      "x-rapidapi-key": api_key,
+      "x-rapidapi-key": config::api_key(),
       "Accept": "application/json",
     ],
   })

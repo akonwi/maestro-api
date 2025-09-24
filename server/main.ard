@@ -1,11 +1,11 @@
 use ard/async
 use ard/decode
-use ard/env
 use ard/io
 use ard/http
 use ard/json
 
 use maestro/bets
+use maestro/config
 use maestro/data
 use maestro/db
 use maestro/leagues
@@ -54,13 +54,7 @@ fn main() {
   let conn = db::connect()
   db::init(conn)
 
-  let secret = match env::get("API_TOKEN") {
-    secret => secret,
-    _ => {
-      panic("Missing API_TOKEN environment variable")
-      ""
-    }
-  }
+  let secret = config::api_password()
   fn is_authorized(header: Str?) Bool {
     match header {
       h => secret == h,
@@ -71,13 +65,7 @@ fn main() {
   // start fiber for updating db regularly
   async::start(fn() { data::sync() })
 
-  let env_port = env::get("PORT").or("")
-  if env_port.is_empty() {
-    panic("Missing PORT environment variable")
-  }
-
-  let port = Int::from_str(env_port).or(3000)
-
+  let port = config::port()
   io::print("starting on port {port}")
 
   http::serve(

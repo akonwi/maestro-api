@@ -2,7 +2,6 @@ use ard/env
 use ard/decode
 use ard/http
 use ard/io
-use ard/maybe
 use ard/sqlite
 
 struct Team {

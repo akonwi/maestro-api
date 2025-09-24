@@ -1,8 +1,14 @@
 use ard/env
 
 fn api_key() Str {
-  match env::get("API_KEY") {
-    key => key,
-    _ => panic("API_KEY environment variable not set")
-  }
+  env::get("API_KEY").expect("API_KEY environment variable not set")
+}
+
+fn api_password() Str {
+  env::get("API_TOKEN").expect("API_TOKEN environment variable not set")
+}
+
+fn port() Int {
+  let env_port = env::get("PORT").expect("Missing PORT environment variable")
+  Int::from_str(env_port).expect("Unable to convert PORT environment variable into Int ")
 }
