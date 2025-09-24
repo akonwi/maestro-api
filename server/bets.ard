@@ -113,7 +113,6 @@ fn get_overview(db: sqlite::Database) Overview!Str {
 }
 
 fn catch(errs: [decode::Error]) Bet!Str {
-  // todo: Decode::Error.pretty_path()
   io::print("Error parsing bet input: {errs.at(0)}")
   Result::err(message: errs.at(0).to_str())
 }
