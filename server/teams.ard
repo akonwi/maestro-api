@@ -70,30 +70,6 @@ fn get_in_matches(db: sqlite::Database, ids: [Int]) [Int:Str]!Str {
   Result::ok(id_to_name)
 }
 
-struct Snapshot {
-	id: Int,
-	name: Str,
-	num_games: Int,
-	wins: Int,
-	losses: Int,
-	draws:  Int,
-
-	goals_against: Int,
-	goals_for: Int,
-	goals_diff: Int,
-	xgf: Float,
-	xga: Float,
-	leakiness: Float,
-
-	cleansheets: Int,
-	one_conceded: Int,
-
-	// could be presented as +1.5
-	two_plus_conceded: Int,
-
-	win_rate: Float,
-}
-
 fn decode_from_api(data: Dynamic) Team![decode::Error] {
   let id = try decode::run(data, decode::field("id", decode::int))
   let name = try decode::run(data, decode::field("name", decode::string))

@@ -32,6 +32,8 @@ struct Snapshot {
 
 	goals_against: Int,
 	goals_for: Int,
+	one_plus_scored: Int, // number of games in which team scored > 1 goal
+	strike_rate: Float, // percentage of matches finding the net
 	goals_diff: Int,
 	xgf: Float,
 	xga: Float,
@@ -61,7 +63,7 @@ fn get_comparison(fixture_id: Int) Comparison!Str {
     ],
   })
 
-  fn decode_stats(data: Dynamic) teams::Snapshot![decode::Error] {
+  fn decode_stats(data: Dynamic) Snapshot![decode::Error] {
     let id = try decode_id(data)
     let name = try decode_name(data)
     let league_data = try decode::extract_field(data, "league") -> found {
@@ -79,6 +81,8 @@ fn get_comparison(fixture_id: Int) Comparison!Str {
     let xga = Float::from_int(goals_against) / Float::from_int(num_played)
     let goals_for = try decode::run(league_data, decode::path(["goals", "for", "total", "total"], decode::int))
     let xgf = Float::from_int(goals_for) / Float::from_int(num_played)
+    let one_plus_scored = try decode::run(league_data, decode::path(["goals", "for", "under_over", "1.5", "over"], decode::int))
+    let no_score = try decode::run(league_data, decode::path(["failed_to_score", "total"], decode::int))
     let cleansheets = try decode::run(league_data, decode::path(["clean_sheet", "total"], decode::int))
     let at_least_1_against = try decode::run(league_data, decode::path(["goals", "against", "under_over", "0.5", "over"], decode::int))
     let over_1_against = try decode::run(league_data, decode::path(["goals", "against", "under_over", "1.5", "over"], decode::int))
@@ -95,6 +99,8 @@ fn get_comparison(fixture_id: Int) Comparison!Str {
       goals_against: goals_against,
       xga: xga,
       goals_for: goals_for,
+      one_plus_scored: one_plus_scored,
+      strike_rate: 1.0 - Float::from_int(no_score) / Float::from_int(num_played),
       xgf: xgf,
       goals_diff: goals_for - goals_against,
       cleansheets: cleansheets,
