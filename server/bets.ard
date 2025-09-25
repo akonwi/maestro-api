@@ -18,7 +18,7 @@ enum Outcome {
   push
 }
 
-impl Outcome {
+impl Str::ToString for Outcome {
   fn to_str() Str {
     match @ {
       Outcome::pending => "pending",
@@ -215,7 +215,7 @@ fn resolve_team_total(db: sqlite::Database, bet: Bet, goals: Int) Void!Str {
     true => Outcome::win,
     false => Outcome::lose
   }
-  db.exec("update bets set result = '{outcome.to_str()}' where id = {bet.id}")
+  db.exec("update bets set result = '{outcome}' where id = {bet.id}")
 }
 
 fn resolve_team_cleansheet(db: sqlite::Database, bet: Bet, opp_goals: Int) Void!Str {
@@ -223,7 +223,7 @@ fn resolve_team_cleansheet(db: sqlite::Database, bet: Bet, opp_goals: Int) Void!
     true => Outcome::win,
     false => Outcome::lose
   }
-  db.exec("update bets set result = '{outcome.to_str()}' where id = {bet.id}")
+  db.exec("update bets set result = '{outcome}' where id = {bet.id}")
 }
 
 fn process_bet(db: sqlite::Database, bet: Bet) Void!Str {
@@ -241,7 +241,7 @@ fn process_bet(db: sqlite::Database, bet: Bet) Void!Str {
 
 fn update_outcomes(db: sqlite::Database) {
   while {
-    let rows = try db.query("select * from bets where result = '{Outcome::pending.to_str()}'") -> err {
+    let rows = try db.query("select * from bets where result = '{Outcome::pending}'") -> err {
       io::print("Error finding pending bets to update: {err}")
     }
     let bets = try decode_bets(rows) -> errs {
