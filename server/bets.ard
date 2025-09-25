@@ -2,6 +2,24 @@ use ard/decode
 use ard/io
 use ard/sqlite
 
+enum Outcome {
+  pending,
+  win,
+  lose,
+  push
+}
+
+impl Outcome {
+  fn to_str() Str {
+    match @ {
+      Outcome::pending => "pending",
+      Outcome::win => "win",
+      Outcome::lose => "lose",
+      Outcome::push => "push"
+    }
+  }
+}
+
 struct Bet {
   id: Int,
   match_id: Int,
