@@ -10,20 +10,32 @@ struct Bet {
   line: Float,
   odds: Int,
   result: Str,
+  type_id: Int
 }
 
+let decode_id = decode::field("id", decode::int)
+let decode_match_id = decode::field("match_id", decode::int)
+let decode_type_id = decode::field("type_id", decode::int)
+let decode_name = decode::field("name", decode::string)
+let decode_amount = decode::field("amount", decode::float)
+let decode_line = decode::field("line", decode::float)
+let decode_odds = decode::field("odds", decode::int)
+let decode_result = decode::field("result", decode::string)
+
 fn decode_bet(data: Dynamic) Bet![decode::Error] {
-  let id = try decode::run(data, decode::field("id", decode::int))
-  let match_id = try decode::run(data, decode::field("match_id", decode::int))
-  let name = try decode::run(data, decode::field("name", decode::string))
-  let amount = try decode::run(data, decode::field("amount", decode::float))
-  let line = try decode::run(data, decode::field("line", decode::float))
-  let odds = try decode::run(data, decode::field("odds", decode::int))
-  let result = try decode::run(data, decode::field("result", decode::string))
+  let id = try decode_id(data)
+  let match_id = try decode_match_id(data)
+  let type_id = try decode_type_id(data)
+  let name = try decode_name(data)
+  let amount = try decode_amount(data)
+  let line = try decode_line(data)
+  let odds = try decode_odds(data)
+  let result = try decode_result(data)
 
   Result::ok(Bet{
     id: id,
     match_id: match_id,
+    type_id: type_id,
     name: name,
     amount: amount,
     line: line,
@@ -32,9 +44,11 @@ fn decode_bet(data: Dynamic) Bet![decode::Error] {
   })
 }
 
+let decode_bets = decode::list(decode_bet)
+
 fn get_all(db: sqlite::Database) [Bet]!Str {
   let rows = try db.query("select * from bets")
-  let bets = try decode::run(rows, decode::list(decode_bet)) -> errs { Result::err(errs.at(0).to_str()) }
+  let bets = try decode_bets(rows) -> errs { Result::err(errs.at(0).to_str()) }
   Result::ok(bets)
 }
 
@@ -119,22 +133,24 @@ fn catch(errs: [decode::Error]) Bet!Str {
 
 // todo: use a union for the error type - could be bad inputs or db error
 fn create(db: sqlite::Database, input: Dynamic) Bet!Str {
-  let match_id = try decode::run(input, decode::field("match_id", decode::int)) -> catch
-  let name = try decode::run(input, decode::field("name", decode::string)) -> catch
-  let amount = try decode::run(input, decode::field("amount", decode::float)) -> catch
-  let line = try decode::run(input, decode::field("line", decode::float)) -> catch
-  let odds = try decode::run(input, decode::field("odds", decode::int)) -> catch
+  let match_id = try decode_match_id(input) -> catch
+  let type_id = try decode_type_id(input) -> catch
+  let name = try decode_name(input) -> catch
+  let amount = try decode_amount(input) -> catch
+  let line = try decode_line(input) -> catch
+  let odds = try decode_odds(input) -> catch
 
   let row = try db.insert(table: "bets", values: [
     "match_id": decode::from_int(match_id),
+    "type_id": decode::from_int(type_id),
     "name": decode::from_str(name),
     "amount": decode::from_float(amount),
     "line": decode::from_float(line),
     "odds": decode::from_int(odds),
     "result": decode::from_str("pending"),
   ])
-  let id = try decode::run(row, decode::field("id", decode::int)) -> _ {
-    Result::err("Couldn't parse id from created bet row")
+  let id = try decode_id(row) -> errs {
+    Result::err("Couldn't parse id from created bet row: {errs.at(0)}")
   }
   let result = try decode::run(row, decode::field("result", decode::string)) -> _ {
     Result::err("Couldn't parse result from created bet row")
@@ -142,6 +158,7 @@ fn create(db: sqlite::Database, input: Dynamic) Bet!Str {
 
   let bet = Bet{
     id: id,
+    type_id: type_id,
     match_id: match_id,
     name: name,
     amount: amount,

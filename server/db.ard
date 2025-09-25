@@ -50,4 +50,5 @@ fn init(db: sqlite::Database) {
       raw_data TEXT
     )"
   )
+  db.exec("ALTER TABLE bets ADD COLUMN type_id INTEGER NOT NULL DEFAULT -1")
 }
