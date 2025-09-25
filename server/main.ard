@@ -64,6 +64,7 @@ fn main() {
 
   // start fiber for updating db regularly
   async::start(fn() { data::sync() })
+  async::start(fn () { bets::update_outcomes(conn) })
 
   let port = config::port()
   io::print("starting on port {port}")

@@ -1,6 +1,15 @@
+use ard/async
 use ard/decode
+use ard/duration
 use ard/io
 use ard/sqlite
+
+use maestro/matches
+
+// let HOME_TOTAL_GOALS = 16
+// let HOME_CLEANSHEET = 27
+// let AWAY_TOTAL_GOALS = 17
+// let AWAY_CLEANSHEET = 28
 
 enum Outcome {
   pending,
@@ -199,4 +208,50 @@ fn update(db: sqlite::Database, id: Int, input: Dynamic) Void!Str {
 
 fn delete(db: sqlite::Database, id: Int) Bool!Str {
   db.delete("bets", "id = {id}")
+}
+
+fn resolve_team_total(db: sqlite::Database, bet: Bet, goals: Int) Void!Str {
+  let outcome = match Float::from_int(goals) > bet.line {
+    true => Outcome::win,
+    false => Outcome::lose
+  }
+  db.exec("update bets set result = '{outcome.to_str()}' where id = {bet.id}")
+}
+
+fn resolve_team_cleansheet(db: sqlite::Database, bet: Bet, opp_goals: Int) Void!Str {
+  let outcome = match opp_goals == 0 {
+    true => Outcome::win,
+    false => Outcome::lose
+  }
+  db.exec("update bets set result = '{outcome.to_str()}' where id = {bet.id}")
+}
+
+fn process_bet(db: sqlite::Database, bet: Bet) Void!Str {
+  let fixture = try matches::fetch(bet.match_id)
+  if fixture.status == "FT" {
+    match bet.type_id {
+      16 => resolve_team_total(db, bet, fixture.home_goals),
+      27 => resolve_team_cleansheet(db, bet, fixture.away_goals),
+      17 => resolve_team_total(db, bet, fixture.away_goals),
+      28 => resolve_team_cleansheet(db, bet, fixture.home_goals),
+      _ => io::print("Unexpected bet type: {bet.type_id}")
+    }
+  }
+}
+
+fn update_outcomes(db: sqlite::Database) {
+  while {
+    let rows = try db.query("select * from bets where result = '{Outcome::pending.to_str()}'") -> err {
+      io::print("Error finding pending bets to update: {err}")
+    }
+    let bets = try decode_bets(rows) -> errs {
+      io::print("Error decoding pending bets to update: {errs.at(0).to_str()}")
+    }
+
+    for bet in bets {
+      process_bet(db, bet)
+    }
+
+    async::sleep(duration::from_minutes(30))
+  }
 }
