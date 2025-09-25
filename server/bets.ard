@@ -230,6 +230,7 @@ fn process_bet(db: sqlite::Database, bet: Bet) Void!Str {
   let fixture = try matches::fetch(bet.match_id)
   if fixture.status == "FT" {
     match bet.type_id {
+      -1 => (),
       16 => resolve_team_total(db, bet, fixture.home_goals),
       27 => resolve_team_cleansheet(db, bet, fixture.away_goals),
       17 => resolve_team_total(db, bet, fixture.away_goals),
