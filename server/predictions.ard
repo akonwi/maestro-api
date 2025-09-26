@@ -12,11 +12,6 @@ use maestro/matches
 use maestro/odds
 use maestro/teams
 
-let HOME_TOTAL_GOALS = 16
-let HOME_CLEANSHEET = 27
-let AWAY_TOTAL_GOALS = 17
-let AWAY_CLEANSHEET = 28
-
 let decode_id = decode::field("id", decode::int)
 let decode_name = decode::field("name", decode::string)
 
@@ -272,20 +267,19 @@ fn find_good_odds(db: sqlite::Database) {
           let bets = match odds::get(fixture.id) {
             ok(all_odds) => {
               for odd in all_odds {
-                if odd.id == HOME_TOTAL_GOALS  {
+                if odd.id == odds::HOME_TOTAL_GOALS  {
                   pick_team_goal_lines(odd, stats.home, entry)
                 }
 
-                if odd.id == AWAY_TOTAL_GOALS {
+                if odd.id == odds::AWAY_TOTAL_GOALS {
                   pick_team_goal_lines(odd, stats.away, entry)
                 }
 
-                if odd.id == HOME_CLEANSHEET {
+                if odd.id == odds::HOME_CLEANSHEET {
                   pick_cleansheet_lines(odd, stats.home, entry)
                 }
 
-                // cleansheet - away
-                if odd.id == AWAY_CLEANSHEET {
+                if odd.id == odds::AWAY_CLEANSHEET {
                   pick_cleansheet_lines(odd, stats.away, entry)
                 }
               }
