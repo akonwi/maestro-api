@@ -4,6 +4,7 @@ use ard/duration
 use ard/io
 use ard/sqlite
 
+use maestro/db as _db
 use maestro/matches
 
 // let HOME_TOTAL_GOALS = 16
@@ -240,7 +241,8 @@ fn process_bet(db: sqlite::Database, bet: Bet) Void!Str {
   }
 }
 
-fn update_outcomes(db: sqlite::Database) {
+fn update_outcomes() {
+  let db = _db::connect()
   while {
     let rows = try db.query("select * from bets where result = '{Outcome::pending}'") -> err {
       io::print("Error finding pending bets to update: {err}")
