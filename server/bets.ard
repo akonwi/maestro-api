@@ -239,6 +239,7 @@ fn process_bet(db: sqlite::Database, bet: Bet) Void!Str {
       _ => io::print("Unexpected bet type: {bet.type_id}")
     }
   }
+  Result::ok(())
 }
 
 fn update_outcomes() {
