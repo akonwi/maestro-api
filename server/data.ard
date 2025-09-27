@@ -9,9 +9,7 @@ use maestro/predictions
 use maestro/matches
 use maestro/teams
 
-fn sync() {
-  let conn = db::connect()
-
+fn sync(conn: sqlite::Database) {
   while {
     matches::sync(conn)
     predictions::find_good_odds(conn)
