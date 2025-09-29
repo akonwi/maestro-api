@@ -15,12 +15,6 @@ use maestro/teams
 let decode_id = decode::field("id", decode::int)
 let decode_name = decode::field("name", decode::string)
 
-// Get naive/conservative base line
-private fn get_team_goal_line(xgf: Float, xga: Float) Float {
-  let xg = (xgf + xga) / 2.0
-  Float::floor(xg - 0.5) + 0.5
-}
-
 struct Snapshot {
 	id: Int,
 	name: Str,
@@ -127,96 +121,18 @@ fn get_comparison(fixture_id: Int) Comparison!Str {
   Result::ok(comparison)
 }
 
-// 2. calc over/under averages
-// 3. filter out bets aligned with calculations and over -150 odds
-
-struct Stats {
-  games: Int,
-  avg_gf: Float,
-  avg_ga: Float,
-}
-
-struct TeamStats {
-  home: Stats,
-  away: Stats,
-}
-
-fn decode_stats(data: Dynamic) Stats![decode::Error] {
-  let num_games = try decode::run(data,
-    decode::field(
-      "league",
-      decode::field("fixtures",
-        decode::field("played", decode::field("total", decode::int))
-      )
-    )
-  )
-
-  let gf = try decode::run(data,
-    decode::field(
-      "league",
-      decode::field("goals",
-        decode::field("for", decode::field("average", decode::field("total", decode::string)))
-      )
-    )
-  )
-  let ga = try decode::run(data,
-    decode::field(
-      "league",
-      decode::field("goals",
-        decode::field("against", decode::field("average", decode::field("total", decode::string)))
-      )
-    )
-  )
-
-  Result::ok(Stats{
-    games: num_games,
-    avg_gf: Float::from_str(gf).or(0.0),
-    avg_ga: Float::from_str(ga).or(0.0),
-  })
-}
-
-fn decode_team_stats(data: Dynamic) TeamStats![decode::Error] {
-  let home = try decode::run(data, decode::field("teams", decode::field("home", decode_stats)))
-  let away = try decode::run(data, decode::field("teams", decode::field("away", decode_stats)))
-
-  Result::ok(TeamStats{
-    home: home,
-    away: away,
-  })
-}
-
-fn get_stats(fixture_id: Int) TeamStats!Str {
-  let res = try http::send(http::Request{
-    method: http::Method::Get,
-    url: "https://v3.football.api-sports.io/predictions?fixture={fixture_id}",
-    headers: [
-      "x-rapidapi-key": config::api_key(),
-      "Accept": "application/json",
-    ],
-  })
-
-  let body = decode::json(res.body)
-  let stats = try decode::run(
-    body,
-    decode::field("response", decode::list(decode_team_stats))
-  ) -> errs {
-    Result::err(errs.at(0).to_str())
-  }
-  Result::ok(stats.at(0))
-}
-
 struct FixturePicks {
   fixture: matches::Fixture,
   stats: [odds::Stat]
 }
 
-fn pick_team_goal_lines(odd: odds::Stat, stats: Stats, mut entry: FixturePicks) {
+fn pick_team_goal_lines(odd: odds::Stat, stats: Snapshot, mut entry: FixturePicks) {
   mut lines: [odds::Line] = []
   for line in odd.values {
-    if line.name == "Over 1.5" and stats.avg_gf > 1.5 {
+    if line.name == "Over 1.5" and stats.xgf > 1.5 {
       lines.push(line)
     }
-    if line.name == "Over 2.5" and stats.avg_gf > 2.0 {
+    if line.name == "Over 2.5" and stats.xgf >= 2.25 {
       lines.push(line)
     }
   }
@@ -230,15 +146,15 @@ fn pick_team_goal_lines(odd: odds::Stat, stats: Stats, mut entry: FixturePicks) 
   }
 }
 
-fn pick_cleansheet_lines(odd: odds::Stat, stats: Stats, mut entry: FixturePicks) {
+fn pick_cleansheet_lines(odd: odds::Stat, stats: Snapshot, mut entry: FixturePicks) {
   mut lines: [odds::Line] = []
   for line in odd.values {
-    if line.name == "No" and stats.avg_ga > 1.5 {
+    if line.name == "No" and (stats.xga >= 1.5 or stats.leakiness >= 0.5) {
       lines.push(line)
     }
 
     // be extremely conservative
-    if line.name == "Yes" and stats.avg_ga < 1.0 {
+    if line.name == "Yes" and stats.xga < 1.0 {
       lines.push(line)
     }
   }
@@ -255,44 +171,39 @@ fn pick_cleansheet_lines(odd: odds::Stat, stats: Stats, mut entry: FixturePicks)
 fn find_good_odds(db: sqlite::Database) {
   mut entries: [FixturePicks] = []
   for fixture in matches::find_today() {
-    match get_stats(fixture.id) {
-      ok(stats) => {
-        if stats.home.games > 7 {
+    match get_comparison(fixture.id) {
+      ok(comp) => {
+        if comp.home.num_games > 7 {
           mut entry = FixturePicks{
             fixture: fixture,
             stats: [],
           }
-
           // find odds, if team over/under makes sense, save it
           let bets = match odds::get(fixture.id) {
             ok(all_odds) => {
               for odd in all_odds {
                 if odd.id == odds::HOME_TOTAL_GOALS  {
-                  pick_team_goal_lines(odd, stats.home, entry)
+                  pick_team_goal_lines(odd, comp.home, entry)
                 }
 
                 if odd.id == odds::AWAY_TOTAL_GOALS {
-                  pick_team_goal_lines(odd, stats.away, entry)
+                  pick_team_goal_lines(odd, comp.away, entry)
                 }
 
                 if odd.id == odds::HOME_CLEANSHEET {
-                  pick_cleansheet_lines(odd, stats.home, entry)
+                  pick_cleansheet_lines(odd, comp.home, entry)
                 }
 
                 if odd.id == odds::AWAY_CLEANSHEET {
-                  pick_cleansheet_lines(odd, stats.away, entry)
+                  pick_cleansheet_lines(odd, comp.away, entry)
                 }
               }
             },
             err => io::print("Error getting odds for fixture {fixture.id}: {err}")
           }
-
-          if entry.stats.size() > 0 {
-            entries.push(entry)
-          }
         }
       },
-      err => io::print("Error getting prediction for fixture {fixture.id}: {err}")
+      err => io::print("Error getting matchup data for fixture {fixture.id}: {err}")
     }
   }
 
