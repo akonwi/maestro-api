@@ -15,7 +15,9 @@ struct Match {
   league_id: Int,
   status: Str,
   home_team_id: Int,
+  home_team_name: Str,
   away_team_id: Int,
+  away_team_name: Str,
   home_goals: Int,
   away_goals: Int,
   winner_id: Int?,
@@ -40,7 +42,9 @@ fn decode_match(row: Dynamic) Match![decode::Error] {
     league_id: league_id,
     status: status,
     home_team_id: home_team_id,
+    home_team_name: "",
     away_team_id: away_team_id,
+    away_team_name: "",
     home_goals: home_goals,
     away_goals: away_goals,
     winner_id: winner_id,
@@ -55,7 +59,9 @@ fn decode_fixture_entry(row: Dynamic) Match![decode::Error] {
   let status = try decode::run(row, decode::field("fixture", decode::field("status", decode::field("short", decode::string))))
   let league_id = try decode::run(row, decode::field("league", decode::field("id", decode::int)))
   let home_team_id = try decode::run(row, decode::field("teams", decode::field("home", decode::field("id", decode::int))))
+  let home_team_name = try decode::run(row, decode::path(["teams", "home", "name"], decode::string))
   let away_team_id = try decode::run(row, decode::field("teams", decode::field("away", decode::field("id", decode::int))))
+  let away_team_name = try decode::run(row, decode::path(["teams", "away", "name"], decode::string))
   let is_home_win = try decode::run(row, decode::field("teams", decode::field("home", decode::field("winner", decode::nullable(decode::bool)))))
   let is_away_win = try decode::run(row, decode::field("teams", decode::field("away", decode::field("winner", decode::nullable(decode::bool)))))
   let home_goals = try decode::run(row, decode::field("goals", decode::field("home", decode::nullable(decode::int))))
@@ -78,7 +84,9 @@ fn decode_fixture_entry(row: Dynamic) Match![decode::Error] {
     league_id: league_id,
     status: status,
     home_team_id: home_team_id,
+    home_team_name: home_team_name,
     away_team_id: away_team_id,
+    away_team_name: away_team_name,
     home_goals: home_goals.or(0),
     away_goals: away_goals.or(0),
     winner_id: winner_id,
