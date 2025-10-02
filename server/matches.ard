@@ -25,34 +25,6 @@ struct Match {
   winner_id: Int?,
 }
 
-fn decode_match(row: Dynamic) Match![decode::Error] {
-  let id = try decode::run(row, decode::field("id", decode::int))
-  let date = try decode::run(row, decode::field("date", decode::string))
-  let timestamp = try decode::run(row, decode::field("timestamp", decode::int))
-  let league_id = try decode::run(row, decode::field("league_id", decode::int))
-  let status = try decode::run(row, decode::field("status", decode::string))
-  let home_team_id = try decode::run(row, decode::field("home_team_id", decode::int))
-  let away_team_id = try decode::run(row, decode::field("away_team_id", decode::int))
-  let home_goals = try decode::run(row, decode::field("home_goals", decode::int))
-  let away_goals = try decode::run(row, decode::field("away_goals", decode::int))
-  let winner_id = try decode::run(row, decode::field("winner_id", decode::nullable(decode::int)))
-
-  Result::ok(Match{
-    id: id,
-    date: date,
-    timestamp: timestamp,
-    league_id: league_id,
-    status: status,
-    home_team_id: home_team_id,
-    home_team_name: "",
-    away_team_id: away_team_id,
-    away_team_name: "",
-    home_goals: home_goals,
-    away_goals: away_goals,
-    winner_id: winner_id,
-  })
-}
-
 // fixtures come from API-Football
 fn decode_fixture_entry(row: Dynamic) Match![decode::Error] {
   let id = try decode::run(row, decode::field("fixture", decode::field("id", decode::int)))
@@ -112,40 +84,6 @@ fn get_season(league_id: Int) [Match]!Str {
     Result::err(errs.at(0).to_str())
   }
   Result::ok(fixtures)
-}
-
-// turn into values for the database
-fn to_values(m: Match) [Str:Dynamic] {
-  mut values: [Str: Dynamic] = [
-    "id": decode::from_int(m.id),
-    "date": decode::from_str(m.date),
-    "timestamp": decode::from_int(m.timestamp),
-    "league_id": decode::from_int(m.league_id),
-    "status": decode::from_str(m.status),
-    "home_team_id": decode::from_int(m.home_team_id),
-    "away_team_id": decode::from_int(m.away_team_id),
-    "home_goals": decode::from_int(m.home_goals),
-    "away_goals": decode::from_int(m.away_goals),
-  ]
-
-  match m.winner_id {
-    id => values.set("winner_id", decode::from_int(id)),
-    _ => {},
-  }
-
-  values
-}
-
-private fn ints_to_str(ints: [Int]) Str {
-  mut str = ""
-  for int, idx in ints {
-    if idx == 0 {
-      str = int.to_str()
-    } else {
-      str = "{str},{int}"
-    }
-  }
-  str
 }
 
 fn get(id: Int) Match!Str {
