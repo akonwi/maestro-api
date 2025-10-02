@@ -6,7 +6,6 @@ use ard/sqlite
 
 use maestro/matches
 
-
 enum Outcome {
   pending,
   win,
@@ -87,8 +86,8 @@ struct Overview {
   total_wagered: Float,
   win_rate: Float,
   gross_payout: Float,
-  net_profit:     Float,
-  gross_loss:   Float,
+  net_profit: Float,
+  gross_loss: Float,
   roi: Float,
 }
 
@@ -215,9 +214,9 @@ fn resolve_team_total(db: sqlite::Database, bet: Bet, goals: Int) Void!Str {
 }
 
 fn resolve_team_cleansheet(db: sqlite::Database, bet: Bet, opp_goals: Int) Void!Str {
-  let outcome = match opp_goals == 0 {
-    true => Outcome::win,
-    false => Outcome::lose
+  let outcome = match opp_goals {
+    0 => Outcome::win,
+    _ => Outcome::lose
   }
   db.exec("update bets set result = '{outcome}' where id = {bet.id}")
 }
