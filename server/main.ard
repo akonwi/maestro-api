@@ -6,7 +6,6 @@ use ard/json
 
 use maestro/bets
 use maestro/config
-use maestro/data
 use maestro/db
 use maestro/leagues
 use maestro/matches
@@ -63,7 +62,7 @@ fn main() {
   }
 
   // start fiber for updating db regularly
-  async::start(fn() { data::sync(conn) })
+  async::start(fn() { predictions::find_juice_worker() })
   async::start(fn () { bets::update_outcomes(conn) })
 
   let port = config::port()

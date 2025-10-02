@@ -1,5 +1,7 @@
+use ard/async
 use ard/dates
 use ard/decode
+use ard/duration
 use ard/env
 use ard/fs
 use ard/http
@@ -8,6 +10,7 @@ use ard/json
 use ard/sqlite
 
 use maestro/config
+use maestro/db as _db
 use maestro/matches
 use maestro/odds
 use maestro/teams
@@ -168,7 +171,9 @@ fn pick_cleansheet_lines(odd: odds::Stat, stats: Snapshot, mut entry: FixturePic
   }
 }
 
-fn find_good_odds(db: sqlite::Database) {
+private fn find_juice() {
+  let db = _db::connect()
+
   mut entries: [FixturePicks] = []
   for fixture in matches::find_today() {
     match get_comparison(fixture.id) {
@@ -219,6 +224,15 @@ fn find_good_odds(db: sqlite::Database) {
       }
     },
     err => io::print("Error encoding juice data to JSON: {err}")
+  }
+
+  db.close()
+}
+
+fn find_juice_worker() {
+  while {
+    find_juice()
+    async::sleep(duration::from_hours(2))
   }
 }
 
