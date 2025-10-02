@@ -95,7 +95,7 @@ fn decode_fixture_entry(row: Dynamic) Match![decode::Error] {
   })
 }
 
-fn fetch_season(league_id: Int) [Match]!Str {
+fn get_season(league_id: Int) [Match]!Str {
   let req = http::Request{
     method: http::Method::Get,
     url: "https://v3.football.api-sports.io/fixtures?league={league_id}&season={SEASON}",

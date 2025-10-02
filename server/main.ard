@@ -179,7 +179,7 @@ fn main() {
         match req.method {
           http::Method::Get => {
             let league_id = try Int::from_str(req.path_param("id")) -> _ { not_found }
-            let fixtures = try matches::fetch_season(league_id) -> internal_error
+            let fixtures = try matches::get_season(league_id) -> internal_error
 
             struct Res { matches: [matches::Match] }
             match json::encode(Res{ matches: fixtures }) {
