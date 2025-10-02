@@ -148,15 +148,7 @@ private fn ints_to_str(ints: [Int]) Str {
   str
 }
 
-fn get(db: sqlite::Database, id: Int) Match!Str {
-  let row = try db.first("select * from matches where id = {id};")
-  let found = try decode::run(row, decode_match) -> errors {
-    Result::err(errors.at(0).to_str())
-  }
-  Result::ok(found)
-}
-
-fn fetch(id: Int) Match!Str {
+fn get(id: Int) Match!Str {
   let req = http::Request{
     method: http::Method::Get,
     url: "https://v3.football.api-sports.io/fixtures?id={id}",

@@ -223,7 +223,7 @@ fn resolve_team_cleansheet(db: sqlite::Database, bet: Bet, opp_goals: Int) Void!
 }
 
 fn process_bet(db: sqlite::Database, bet: Bet) Void!Str {
-  let fixture = try matches::fetch(bet.match_id)
+  let fixture = try matches::get(bet.match_id)
   if fixture.status == "FT" {
     match bet.type_id {
       -1 => (),

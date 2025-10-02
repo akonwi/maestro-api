@@ -195,7 +195,7 @@ fn main() {
         match req.method {
           http::Method::Get => {
             let id = try Int::from_str(req.path_param("id")) -> _ { not_found }
-            let fixture = try matches::fetch(id) -> internal_error
+            let fixture = try matches::get(id) -> internal_error
 
             match json::encode(fixture) {
               ok(body) => http::Response{status:200, body:body, headers:res_headers},
