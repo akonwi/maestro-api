@@ -28,11 +28,29 @@ fn decode_team(row: Dynamic) Team![decode::Error] {
   })
 }
 
+struct League {
+  id: Int,
+  name: Str,
+  season: Int,
+}
+
+fn decode_league(row: Dynamic) League![decode::Error] {
+  let id = try decode::run(row, decode::field("id", decode::int))
+  let name = try decode::run(row, decode::field("name", decode::string))
+  let season = try decode::run(row, decode::field("season", decode::int))
+
+  Result::ok(League{
+    id: id,
+    name: name,
+    season: season,
+  })
+}
+
 struct Match {
   id: Int,
   date: Str,
   timestamp: Int,
-  league_id: Int,
+  league: League,
   status: Str,
   home: Team,
   away: Team,
@@ -47,7 +65,7 @@ fn decode_fixture_entry(row: Dynamic) Match![decode::Error] {
   let date = try decode::run(row, decode::path(["fixture", "date"], decode::string))
   let timestamp = try decode::run(row, decode::path(["fixture", "timestamp"], decode::int))
   let status = try decode::run(row, decode::path(["fixture", "status", "short"], decode::string))
-  let league_id = try decode::run(row, decode::path(["league", "id"], decode::int))
+  let league = try decode::run(row, decode::field("league", decode_league))
   let home = try decode::run(row, decode::path(["teams", "home"], decode_team))
   let away = try decode::run(row, decode::path(["teams", "away"], decode_team))
   let is_home_win = try decode::run(row, decode::path(["teams", "home", "winner"], decode::nullable(decode::bool)))
@@ -69,7 +87,7 @@ fn decode_fixture_entry(row: Dynamic) Match![decode::Error] {
     id: id,
     date: date,
     timestamp: timestamp,
-    league_id: league_id,
+    league: league,
     status: status,
     home: home,
     away: away,
