@@ -190,7 +190,7 @@ fn main() {
       "/leagues/:id/matches": fn(req: http::Request) http::Response {
         match req.method {
           http::Method::Get => {
-            let league_id = Int::from_str(req.path_param("id")).or(-1)
+            let league_id = try Int::from_str(req.path_param("id")) -> _ { not_found }
             let fixtures = try matches::fetch_season(league_id) -> internal_error
 
             struct Res { matches: [matches::Match] }
@@ -221,7 +221,7 @@ fn main() {
       "/analysis/:matchId": fn(req: http::Request) http::Response {
         match req.method {
           http::Method::Get => {
-            let fixture_id = Int::from_str(req.path_param("matchId")).or(-1)
+            let fixture_id = try Int::from_str(req.path_param("matchId")) -> _ { not_found }
             match fixture_id < -1 {
               true => {
                 mut headers = res_headers
