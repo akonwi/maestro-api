@@ -138,6 +138,15 @@ fn pick_team_goal_lines(odd: odds::Stat, stats: Snapshot, mut entry: FixturePick
     if line.name == "Over 2.5" and stats.xgf >= 2.25 {
       lines.push(line)
     }
+    if line.name == "Under 0.5" and stats.xgf <= 1.0 {
+      lines.push(line)
+    }
+    if line.name == "Under 1.5" and stats.xgf <= 1.5 {
+      lines.push(line)
+    }
+    if line.name == "Under 2.5" and stats.xgf < 2.5 {
+      lines.push(line)
+    }
   }
 
   if lines.size() > 0 {
@@ -184,7 +193,7 @@ private fn find_juice() {
             stats: [],
           }
           // find odds, if team over/under makes sense, save it
-          let bets = match odds::get(fixture.id) {
+          match odds::get(fixture.id) {
             ok(all_odds) => {
               for odd in all_odds {
                 if odd.id == odds::HOME_TOTAL_GOALS  {
@@ -205,6 +214,10 @@ private fn find_juice() {
               }
             },
             err => io::print("Error getting odds for fixture {fixture.id}: {err}")
+          }
+
+          if entry.stats.size() > 0 {
+            entries.push(entry)
           }
         }
       },
