@@ -66,18 +66,32 @@ fn decode_bet(data: Dynamic) Bet![decode::Error] {
   })
 }
 
-let decode_bets = decode::list(decode_bet)
-
-fn get_all(db: sqlite::Database) [Bet]!Str {
-  let rows = try db.query("select * from bets")
-  let bets = try decode_bets(rows) -> errs { Result::err(errs.at(0).to_str()) }
+fn decode_bets(rows: [Dynamic]) [Bet]!Str {
+  mut bets: [Bet] = []
+  for row, idx in rows {
+    let bet = try decode_bet(row) -> errs { Result::err("Failed to decode row {idx}: {errs.at(0).to_str()}") }
+    bets.push(bet)
+  }
   Result::ok(bets)
 }
 
+fn get_all(db: sqlite::Database) [Bet]!Str {
+  let query = db.query("select * from bets")
+  let vals: [Str:sqlite::Value] = [:]
+  let rows = try query.all(vals)
+  decode_bets(rows)
+}
+
 fn find_by_match(db: sqlite::Database, match_id: Int) [Bet]!Str {
-  let rows = try db.query("select * from bets where match_id = {match_id}")
-  let bets = try decode::run(rows, decode::list(decode_bet)) -> errs { Result::err(errs.at(0).to_str()) }
-  Result::ok(bets)
+  let query = db.query("select * from bets where match_id = @match_id")
+  let rows = try query.all(["match_id": match_id])
+  decode_bets(rows)
+}
+
+fn find_by_outcome(db: sqlite::Database, outcome: Outcome) [Bet]!Str {
+  let query = db.query("select * from bets where result = @outcome")
+  let rows = try query.all(["outcome": outcome.to_str()])
+  decode_bets(rows)
 }
 
 struct Overview {
@@ -92,42 +106,59 @@ struct Overview {
 }
 
 fn get_overview(db: sqlite::Database) Overview!Str {
-  let amount_data = try db.first("SELECT COALESCE(SUM(amount), 0) as value FROM bets")
-  let total_wagered = try decode::run(amount_data, decode::field("value", decode::float)) -> errs {
-    Result::err("Failed to sum total bet amount: {errs.at(0)}")
+  let amount_data = try db.query("SELECT COALESCE(SUM(amount), 0) as value FROM bets").first(["_": 0])
+  let total_wagered = match amount_data {
+    row => {
+      try decode::run(row, decode::field("value", decode::float)) -> errs {
+        Result::err("Failed to sum total bet amount: {errs.at(0)}")
+      }
+    },
+    _ => 0.0
   }
 
-  let wins = try db.count("bets", "result = 'win'")
-  let losses = try db.count("bets", "result = 'lose'")
-  let num_pending = try db.count("bets", "result = 'pending'")
+  fn get_count(result: [Dynamic]!Str) Int!Str {
+    match result {
+      ok => Result::ok(ok.size()),
+      err => Result::err(err)
+    }
+  }
 
-  // Calculate total payout
-	let	winning_bet_rows = try db.query("SELECT amount, odds FROM bets WHERE result = 'win'")
+  let result_count_query = db.query("SELECT amount, odds FROM bets WHERE result = @result")
+  let win_rows = try result_count_query.all(["result": Outcome::win.to_str()])
+  let wins = win_rows.size()
+  let losses = try get_count(result_count_query.all(["result": Outcome::lose.to_str()]))
+  let num_pending = try get_count(result_count_query.all(["result": Outcome::pending.to_str()]))
 
-	let payouts = try decode::run(winning_bet_rows, decode::list(fn(data: Dynamic) Float![decode::Error] {
-	  let amount = try decode::run(data, decode::field("amount", decode::float))
-	  let odds = try decode::run(data, decode::field("odds", decode::int))
+  fn get_total_payout(rows: [Dynamic]) Float![decode::Error] {
+    mut total = 0.0
+    for row in rows {
+      let amount = try decode_amount(row)
+      let odds = try decode_odds(row)
 
-		// Positive odds: +150 means bet $100 to win $150
-		// Negative odds: -150 means bet $150 to win $100
-		let payout = match odds > 0 {
-		  true => amount + (amount * Float::from_int(odds) / 100.0),
-			false => amount + (amount * 100.0 / Float::from_int(-odds))
-		}
-		Result::ok(payout)
-	})) -> errs {
+  		// Positive odds: +150 means bet $100 to win $150
+  		// Negative odds: -150 means bet $150 to win $100
+  		total =+ match odds > 0 {
+  		  true => amount + (amount * Float::from_int(odds) / 100.0),
+  			false => amount + (amount * 100.0 / Float::from_int(-odds))
+  		}
+    }
+
+    Result::ok(total)
+  }
+
+	let gross_payout = try get_total_payout(win_rows) -> errs {
 	  Result::err("Failed to calculate total payout. Expected {errs.at(0).expected}, Got {errs.at(0).found}")
 	}
 
-	mut gross_payout = 0.0
-	for p in payouts {
-	  gross_payout =+ p
-	}
-
-	// Get total losses (losing bets amount)
-	let loss_amount_data = try db.first("SELECT COALESCE(SUM(amount), 0) as value FROM bets WHERE result = 'lose'")
-	let gross_loss = try decode::run(loss_amount_data, decode::field("value", decode::float)) -> errs {
-	  Result::err("Failed to calculate total loss: {errs.at(0)}")
+	let gross_amount_query = db.query("SELECT COALESCE(SUM(amount), 0) as value FROM bets WHERE result = @result")
+	let loss_amount_data = try gross_amount_query.first(["result": Outcome::lose.to_str()])
+	let gross_loss = match loss_amount_data {
+	  row => {
+			try decode::run(row, decode::field("value", decode::float)) -> errs {
+			  Result::err("Failed to decode total loss: {errs.at(0)}")
+			}
+		},
+		_ => 0.0
 	}
 
 	let settled = wins + losses
@@ -161,21 +192,22 @@ fn create(db: sqlite::Database, input: Dynamic) Bet!Str {
   let amount = try decode_amount(input) -> catch
   let line = try decode_line(input) -> catch
   let odds = try decode_odds(input) -> catch
+  let outcome = Outcome::pending.to_str()
 
-  let row = try db.insert(table: "bets", values: [
-    "match_id": decode::from_int(match_id),
-    "type_id": decode::from_int(type_id),
-    "name": decode::from_str(name),
-    "amount": decode::from_float(amount),
-    "line": decode::from_float(line),
-    "odds": decode::from_int(odds),
-    "result": decode::from_str("pending"),
-  ])
+  let insert = db.query("INSERT INTO bets (match_id, type_id, name, amount, line, odds, result) VALUES (@match_id, @type_id, @name, @amount, @line, @odds, @result) RETURNING id")
+  let values: [Str:sqlite::Value] = [
+    "match_id": match_id,
+    "type_id": type_id,
+    "name": name,
+    "amount": amount,
+    "line": line,
+    "odds": odds,
+    "result": outcome,
+  ]
+  let row = try insert.first(values)
+  let row = try row -> _ { Result::err("Created row not returned") }
   let id = try decode_id(row) -> errs {
     Result::err("Couldn't parse id from created bet row: {errs.at(0)}")
-  }
-  let result = try decode::run(row, decode::field("result", decode::string)) -> _ {
-    Result::err("Couldn't parse result from created bet row")
   }
 
   let bet = Bet{
@@ -186,7 +218,7 @@ fn create(db: sqlite::Database, input: Dynamic) Bet!Str {
     amount: amount,
     line: line,
     odds: odds,
-    result: result,
+    result: outcome,
   }
 
   Result::ok(bet)
@@ -194,15 +226,15 @@ fn create(db: sqlite::Database, input: Dynamic) Bet!Str {
 
 // currently only supporting changing the result
 fn update(db: sqlite::Database, id: Int, input: Dynamic) Void!Str {
-  let result = try decode::run(input, decode::field("result", decode::string)) -> errs {
-    io::print("Error parsing result to update bet: {errs.at(0)}")
-    Result::err(message: errs.at(0).to_str())
+  let outcome = try decode_result(input) -> errs {
+    Result::err("Invalid input.result: {errs.at(0)}")
   }
-  db.exec("update bets set result = '{result}' where id = {id}")
+  let values: [Str:sqlite::Value] = ["id": id, "outcome": outcome]
+  db.query("UPDATE bets SET result = @outcome where id = @id").run(values)
 }
 
-fn delete(db: sqlite::Database, id: Int) Bool!Str {
-  db.delete("bets", "id = {id}")
+fn delete(db: sqlite::Database, id: Int) Void!Str {
+  db.query("DELETE FROM bets WHERE id = @id").run(["id": id])
 }
 
 fn resolve_team_total(db: sqlite::Database, bet: Bet, goals: Int) Void!Str {
@@ -210,7 +242,8 @@ fn resolve_team_total(db: sqlite::Database, bet: Bet, goals: Int) Void!Str {
     true => Outcome::win,
     false => Outcome::lose
   }
-  db.exec("update bets set result = '{outcome}' where id = {bet.id}")
+  let values: [Str:sqlite::Value] = ["id": bet.id, "outcome": outcome.to_str()]
+  db.query("UPDATE bets SET result = @outcome where id = @id").run(values)
 }
 
 fn resolve_team_cleansheet(db: sqlite::Database, bet: Bet, opp_goals: Int) Void!Str {
@@ -218,7 +251,8 @@ fn resolve_team_cleansheet(db: sqlite::Database, bet: Bet, opp_goals: Int) Void!
     0 => Outcome::win,
     _ => Outcome::lose
   }
-  db.exec("update bets set result = '{outcome}' where id = {bet.id}")
+  let values: [Str:sqlite::Value] = ["id": bet.id, "outcome": outcome.to_str()]
+  db.query("UPDATE bets SET result = @outcome where id = @id").run(values)
 }
 
 fn process_bet(db: sqlite::Database, bet: Bet) Void!Str {
@@ -238,11 +272,8 @@ fn process_bet(db: sqlite::Database, bet: Bet) Void!Str {
 
 fn update_outcomes(db: sqlite::Database) {
   while {
-    let rows = try db.query("select * from bets where result = '{Outcome::pending}'") -> err {
+    let bets = try find_by_outcome(db, Outcome::pending) -> err {
       io::print("Error finding pending bets to update: {err}")
-    }
-    let bets = try decode_bets(rows) -> errs {
-      io::print("Error decoding pending bets to update: {errs.at(0).to_str()}")
     }
 
     for bet in bets {

@@ -13,7 +13,6 @@ use maestro/config
 use maestro/db as _db
 use maestro/matches
 use maestro/odds
-use maestro/teams
 
 let decode_id = decode::field("id", decode::int)
 let decode_name = decode::field("name", decode::string)
@@ -180,6 +179,21 @@ fn pick_cleansheet_lines(odd: odds::Stat, stats: Snapshot, mut entry: FixturePic
   }
 }
 
+private fn save_juice(db: sqlite::Database, id: Str, raw: Str) Void!Str {
+  io::print("Saving juice: {id}")
+  let rows = try db.query("SELECT id FROM juice WHERE id = @id").first(["id": id])
+  let sql = match rows.is_some() {
+    true => "UPDATE juice SET raw_data = @raw WHERE id = @id",
+    false => "INSERT INTO juice (id, raw_data) VALUES (@id, @raw)"
+  }
+  try db.query(sql).run(["id": id, "raw": raw]) -> err {
+    let msg = "Error saving juice: {err}"
+    io::print(msg)
+    Result::err(msg)
+  }
+  Result::ok(())
+}
+
 private fn find_juice() {
   let db = _db::connect()
 
@@ -229,12 +243,7 @@ private fn find_juice() {
 
   match json::encode(entries) {
     ok(content) => {
-      let today = dates::get_today()
-      io::print("Saving juice: {today}")
-      match db.upsert("juice", "id = '{today}'", ["id": decode::from_str(today), "raw_data": decode::from_str(content)]) {
-        ok => {},
-        err => io::print("Error saving juice: {err}")
-      }
+      save_juice(db, dates::get_today(), content)
     },
     err => io::print("Error encoding juice data to JSON: {err}")
   }
@@ -255,15 +264,15 @@ fn get_juice(db: sqlite::Database, date: Str) Str!Str {
     false => date
   }
 
-  let row = try db.first("select * from juice where id = '{id}';")
-  match decode::is_void(row) {
-    true => Result::ok("[]"),
-    false => {
+  let row = try db.query("select * from juice where id = @id").first(["id": id])
+  match row {
+    row => {
       let raw = try decode::run(row, decode::field("raw_data", decode::string)) -> errs {
         Result::err(errs.at(0).to_str())
       }
 
       Result::ok(raw)
     },
+    _ => Result::ok("[]"),
   }
 }

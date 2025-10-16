@@ -10,7 +10,6 @@ use maestro/db
 use maestro/leagues
 use maestro/matches
 use maestro/predictions
-use maestro/teams
 
 let X_API_TOKEN = "X-Api-Token"
 
