@@ -159,9 +159,13 @@ fn find_today() [Match] {
   }
 
   // todo: follow paginations
-  let body = decode::json(res.body)
-  try decode::run(body, decode::field("response", decode::list(decode_fixture_entry))) -> errs {
-    io::print("Error decoding body.response: {errs.at(0)}")
-    List::new<Match>()
+  match decode::from_json(res.body) {
+    ok(body) => {
+      try decode::run(body, decode::field("response", decode::list(decode_fixture_entry))) -> errs {
+        io::print("Error decoding body.response: {errs.at(0)}")
+        List::new<Match>()
+      }
+    },
+    err => List::new<Match>()
   }
 }

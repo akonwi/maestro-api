@@ -99,7 +99,8 @@ fn main() {
             match is_authorized(req.headers.get(X_API_TOKEN)) {
               false => unauthorized(),
               true => {
-                let bet = try bets::create(conn, decode::json(req.body.or(""))) -> internal_error
+                let raw_body = try decode::from_json(req.body.or("")) -> err { internal_error("Unable to parse request body: {err}") }
+                let bet = try bets::create(conn, raw_body) -> internal_error
                 let body = try json::encode(bet) -> internal_error
                 http::Response{status: 200, headers: res_headers, body: body}
               },
@@ -132,7 +133,8 @@ fn main() {
               true => {
                 match Int::from_str(req.path_param("id")) {
                   id => {
-                    try bets::update(conn, id, decode::json(req.body.or(""))) -> internal_error
+                    let raw_body = try decode::from_json(req.body.or("")) -> err { internal_error("Unable to parse request body: {err}") }
+                    try bets::update(conn, id, raw_body) -> internal_error
                     empty_200()
                   },
                   _ => not_found
