@@ -4,6 +4,7 @@ use ard/duration
 use ard/io
 use ard/sqlite
 
+use maestro/db as _db
 use maestro/matches
 
 enum Outcome {
@@ -270,7 +271,8 @@ fn process_bet(db: sqlite::Database, bet: Bet) Void!Str {
   Result::ok(())
 }
 
-fn update_outcomes(db: sqlite::Database) {
+fn update_outcomes() {
+  let db = _db::connect()
   while {
     let bets = try find_by_outcome(db, Outcome::pending) -> err {
       io::print("Error finding pending bets to update: {err}")
