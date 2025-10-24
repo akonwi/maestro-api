@@ -256,22 +256,11 @@ fn resolve_team_cleansheet(db: sqlite::Database, bet: Bet, opp_goals: Int) Void!
   db.query("UPDATE bets SET result = @outcome where id = @id").run(values)
 }
 
-fn resolve_money_line(db: sqlite::Database, bet: Bet, fixture: matches::Match) Void!Str {
-  let outcome = match {
-    bet.name == "Home" and fixture.home_goals > fixture.away_goals => Outcome::win,
-    bet.name == "Away" and fixture.away_goals > fixture.home_goals => Outcome::win,
-    _ => Outcome::lose
-  }
-  let values: [Str:sqlite::Value] = ["id": bet.id, "outcome": outcome.to_str()]
-  db.query("UPDATE bets SET result = @outcome where id = @id").run(values)
-}
-
 fn process_bet(db: sqlite::Database, bet: Bet) Void!Str {
   let fixture = try matches::get(bet.match_id)
   if fixture.status == "FT" {
     match bet.type_id {
       -1 => (),
-      1 => resolve_money_line(db, bet, fixture),
       16 => resolve_team_total(db, bet, fixture.home_goals),
       27 => resolve_team_cleansheet(db, bet, fixture.away_goals),
       17 => resolve_team_total(db, bet, fixture.away_goals),
