@@ -129,24 +129,21 @@ struct FixturePicks {
 }
 
 fn pick_outcome(odd: odds::Stat, comp: Comparison, mut entry: FixturePicks) {
-  // home is better
-  if comp.home.goals_diff > 10 and comp.away.goals_diff < 0 {
-    let pick = odd.values.at(0)
-    entry.stats.push(odds::Stat{
-      id: odd.id,
-      name: pick.name,
-      values: [pick],
-    })
-  }
-
-  // away is better
-  if comp.away.goals_diff > 10 and comp.home.goals_diff < 0 {
-    let pick = odd.values.at(2)
-    entry.stats.push(odds::Stat{
-      id: odd.id,
-      name: pick.name,
-      values: [pick],
-    })
+  for pick in odd.values {
+    if pick.name == "Home" and comp.home.goals_diff > 10 and comp.away.goals_diff < 0 {
+      entry.stats.push(odds::Stat{
+        id: odd.id,
+        name: pick.name,
+        values: [pick],
+      })
+    }
+    if pick.name == "Away" and comp.away.goals_diff > 10 and comp.home.goals_diff < 0 {
+      entry.stats.push(odds::Stat{
+        id: odd.id,
+        name: pick.name,
+        values: [pick],
+      })
+    }
   }
 }
 
