@@ -4,6 +4,7 @@ use ard/io
 
 use maestro/config
 
+let OUTCOME = 1
 let HOME_TOTAL_GOALS = 16
 let HOME_CLEANSHEET = 27
 let AWAY_TOTAL_GOALS = 17
