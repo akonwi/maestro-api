@@ -258,8 +258,8 @@ fn resolve_team_cleansheet(db: sqlite::Database, bet: Bet, opp_goals: Int) Void!
 
 fn resolve_money_line(db: sqlite::Database, bet: Bet, fixture: matches::Match) Void!Str {
   let outcome = match {
-    bet.name == "Home" and fixture.home_goals > fixture.away_goals => Outcome::win,
-    bet.name == "Away" and fixture.away_goals > fixture.home_goals => Outcome::win,
+    bet.name.contains("Home") and fixture.home_goals > fixture.away_goals => Outcome::win,
+    bet.name.contains("Away") and fixture.away_goals > fixture.home_goals => Outcome::win,
     _ => Outcome::lose
   }
   let values: [Str:sqlite::Value] = ["id": bet.id, "outcome": outcome.to_str()]
