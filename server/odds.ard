@@ -52,18 +52,10 @@ fn decode_bet(data: Dynamic) Stat![decode::Error] {
   let name = try decode::run(data, decode::field("name", decode::string))
   let values = try decode::run(data, decode::field("values", decode::list(decode_line)))
 
-  // filter out lines that aren't worth the bet
-  mut juicy_lines: [Line] = []
-  for l in values {
-    if l.odd >= -150 {
-      juicy_lines.push(l)
-    }
-  }
-
   Result::ok(Stat{
     id: id,
     name: name,
-    values: juicy_lines,
+    values: values,
   })
 }
 
