@@ -85,13 +85,18 @@ fn main() {
         match req.method {
           http::Method::Get => {
             let found_result = match Int::from_str(req.query_param("match_id")) {
-              match_id => bets::find_by_match(conn, match_id),
-              _ => bets::get_all(conn)
+              match_id => {
+                let found = try bets::find_by_match(conn, match_id) -> internal_error
+                struct Res { bets: [bets::Bet] }
+                Res{bets: found}
+              },
+              _ => {
+                let after = Int::from_str(req.query_param("after"))
+                try bets::get_all_paged(conn, after) -> internal_error
+              }
             }
 
-            let bets = try found_result -> internal_error
-            struct Res { bets: [bets::Bet] }
-            let body = try json::encode(Res { bets: bets }) -> internal_error
+            let body = try json::encode(found_result) -> internal_error
             http::Response{status: 200, headers: res_headers, body: body}
           },
           http::Method::Options => empty_200(),

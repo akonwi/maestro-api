@@ -2,6 +2,7 @@ use ard/async
 use ard/decode
 use ard/duration
 use ard/io
+use ard/maybe
 use ard/sqlite
 
 use maestro/db as _db
@@ -81,6 +82,46 @@ fn get_all(db: sqlite::Database) [Bet]!Str {
   let vals: [Str:sqlite::Value] = [:]
   let rows = try query.all(vals)
   decode_bets(rows)
+}
+
+struct ResultPage{
+  bets: [Bet],
+  cursor: Int?,
+  has_next: Bool,
+}
+
+let PAGE_SIZE = 10
+
+fn get_all_paged(db: sqlite::Database, after: Int?) ResultPage!Str {
+  let query_str = match after {
+    cursor => "SELECT * FROM bets where id < @cursor ORDER BY id DESC LIMIT @limit",
+    _ => "SELECT * FROM bets ORDER BY id DESC LIMIT @limit",
+  }
+  let rows = try db.query(query_str).all(["cursor": after.or(0), "limit": PAGE_SIZE + 1 ])
+  let all = try decode_bets(rows)
+  let has_next = rows.size() == PAGE_SIZE + 1
+  mut new_cursor: Int? = maybe::none()
+  mut bets = match has_next {
+    false => all,
+    true => {
+      mut bets: [Bet] = []
+      for bet, i in all {
+        if i < PAGE_SIZE {
+          bets.push(bet)
+        }
+        if i == all.size()-1 {
+          new_cursor = maybe::some(bet.id)
+        }
+      }
+      bets
+    },
+  }
+
+  Result::ok(ResultPage{
+    bets: bets,
+    cursor: new_cursor,
+    has_next: has_next,
+  })
 }
 
 fn find_by_match(db: sqlite::Database, match_id: Int) [Bet]!Str {
