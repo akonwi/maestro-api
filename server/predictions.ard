@@ -17,6 +17,20 @@ use maestro/odds
 let decode_id = decode::field("id", decode::int)
 let decode_name = decode::field("name", decode::string)
 
+fn get_standing(team_id: Int, league_id: Int, season: Int) Int {
+  let res = try http::send(http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/standings?team={team_id}&league={league_id}&season={season}",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+      "Accept": "application/json",
+    ],
+  }) -> _ { -1 }
+  let body = try decode::from_json(res.body) -> _ { -1 }
+
+  try decode::run(body, decode::field("response", decode::at(0, decode::path(["league", "standings"], decode::at(0, decode::at(0, decode::field("rank", decode::int))))))) -> _ { -1 }
+}
+
 struct Snapshot {
 	id: Int,
 	name: Str,
@@ -41,6 +55,7 @@ struct Snapshot {
 	two_plus_conceded: Int,
 
 	win_rate: Float,
+	position: Int,
 }
 
 struct Comparison {
@@ -103,6 +118,7 @@ fn get_comparison(fixture_id: Int) Comparison!Str {
       two_plus_conceded: two_plus_conceded,
       leakiness: Float::from_int(two_plus_conceded) / Float::from_int(num_played) * 100.0,
       win_rate: Float::from_int(wins) / Float::from_int(num_played),
+      position: -1,
     })
   }
 
@@ -117,9 +133,27 @@ fn get_comparison(fixture_id: Int) Comparison!Str {
   }
 
   let body = try decode::from_json(res.body)
-  let comparison = try decode::run(body, decode::field("response", decode::at(0, decode::field("teams", decode_comparison)))) -> errs {
+  mut comparison = try decode::run(body, decode::field("response", decode::at(0, decode::field("teams", decode_comparison)))) -> errs {
     Result::err(errs.at(0).to_str())
   }
+
+  fn dynamic(data: Dynamic) Dynamic![decode::Error] {
+    Result::ok(data)
+  }
+
+  match decode::run(body, decode::field("response", decode::at(0, decode::field("league", dynamic)))) {
+    ok(raw_league) => {
+      let league_id = try decode::run(raw_league, decode::field("id", decode::int)) -> _ { Result::ok(comparison) }
+      let season = try decode::run(raw_league, decode::field("season", decode::int)) -> _ { Result::ok(comparison) }
+      let home_pos = get_standing(league_id: league_id, season: season, team_id: comparison.home.id)
+      let away_pos = get_standing(league_id: league_id, season: season, team_id: comparison.away.id)
+
+      comparison.home.position = home_pos
+      comparison.away.position = away_pos
+    },
+    err => {}
+  }
+
   Result::ok(comparison)
 }
 
