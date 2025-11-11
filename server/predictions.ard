@@ -11,6 +11,7 @@ use ard/sqlite
 
 use maestro/config
 use maestro/db as _db
+use maestro/leagues
 use maestro/matches
 use maestro/odds
 
@@ -255,50 +256,53 @@ private fn save_juice(db: sqlite::Database, id: Str, raw: Str) Void!Str {
 
 private fn find_juice() {
   let db = _db::connect()
+  let ignored_leagues = leagues::get_ignored(db)
 
   mut entries: [FixturePicks] = []
   for fixture in matches::find_today() {
-    match get_comparison(fixture.id) {
-      ok(comp) => {
-        if comp.home.num_games > 7 {
-          mut entry = FixturePicks{
-            fixture: fixture,
-            stats: [],
+    if not ignored_leagues.has(fixture.league.id) {
+      match get_comparison(fixture.id) {
+        ok(comp) => {
+          if comp.home.num_games > 7 {
+            mut entry = FixturePicks{
+              fixture: fixture,
+              stats: [],
+            }
+            // find odds, if team over/under makes sense, save it
+            match odds::get(fixture.id) {
+              ok(all_odds) => {
+                for odd in all_odds {
+                  if odd.id == odds::OUTCOME  {
+                    pick_outcome(odd, comp, entry)
+                  }
+
+                  if odd.id == odds::HOME_TOTAL_GOALS  {
+                    pick_team_goal_lines(odd, comp.home, entry)
+                  }
+
+                  if odd.id == odds::AWAY_TOTAL_GOALS {
+                    pick_team_goal_lines(odd, comp.away, entry)
+                  }
+
+                  if odd.id == odds::HOME_CLEANSHEET {
+                    pick_cleansheet_lines(odd, comp.home, entry)
+                  }
+
+                  if odd.id == odds::AWAY_CLEANSHEET {
+                    pick_cleansheet_lines(odd, comp.away, entry)
+                  }
+                }
+              },
+              err => io::print("Error getting odds for fixture {fixture.id}: {err}")
+            }
+
+            if entry.stats.size() > 0 {
+              entries.push(entry)
+            }
           }
-          // find odds, if team over/under makes sense, save it
-          match odds::get(fixture.id) {
-            ok(all_odds) => {
-              for odd in all_odds {
-                if odd.id == odds::OUTCOME  {
-                  pick_outcome(odd, comp, entry)
-                }
-
-                if odd.id == odds::HOME_TOTAL_GOALS  {
-                  pick_team_goal_lines(odd, comp.home, entry)
-                }
-
-                if odd.id == odds::AWAY_TOTAL_GOALS {
-                  pick_team_goal_lines(odd, comp.away, entry)
-                }
-
-                if odd.id == odds::HOME_CLEANSHEET {
-                  pick_cleansheet_lines(odd, comp.home, entry)
-                }
-
-                if odd.id == odds::AWAY_CLEANSHEET {
-                  pick_cleansheet_lines(odd, comp.away, entry)
-                }
-              }
-            },
-            err => io::print("Error getting odds for fixture {fixture.id}: {err}")
-          }
-
-          if entry.stats.size() > 0 {
-            entries.push(entry)
-          }
-        }
-      },
-      err => io::print("Error getting matchup data for fixture {fixture.id}: {err}")
+        },
+        err => io::print("Error getting matchup data for fixture {fixture.id}: {err}")
+      }
     }
   }
 

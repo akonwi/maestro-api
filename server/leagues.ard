@@ -30,3 +30,17 @@ fn get_all(db: sqlite::Database) [League]!Str {
   }
   Result::ok(leagues)
 }
+
+// a Set would be great
+fn get_ignored(db: sqlite::Database) [Int:Bool] {
+  mut ignored: [Int:Bool] = [:]
+  let rows = try db.query("select id from ignored_league").all(["": ()]) -> _ { ignored }
+
+  for row in rows {
+    match decode::run(row, decode::field("id", decode::int)) {
+      ok(id) => ignored.set(id, true),
+      err => ()
+    }
+  }
+  ignored
+}
