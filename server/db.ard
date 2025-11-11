@@ -50,4 +50,10 @@ fn init(db: sqlite::Database) {
       raw_data TEXT
     )"
   )
+
+  db.exec(
+    "create table if not exists ignored_league (
+      id INTEGER PRIMARY KEY
+    )"
+  )
 }

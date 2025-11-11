@@ -239,7 +239,20 @@ fn main() {
           },
           _ => not_found
         }
-      }
+      },
+
+      "/leagues/:id/hide": fn(req: http::Request) http::Response {
+        match req.method {
+          http::Method::Post => {
+            match Int::from_str(req.path_param("id")) {
+              id => conn.query("INSERT INTO ignored_league (id) VALUES (@id)").run(["id": id]),
+              _ => ()
+            }
+            http::Response{status: 200, headers: res_headers, body: "true"}
+          },
+          _ => not_found
+        }
+      },
     ],
   )
 }
