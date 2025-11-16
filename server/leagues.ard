@@ -1,5 +1,5 @@
 use ard/decode
-use ard/sqlite
+use ard/sql
 
 struct League {
   id: Int,
@@ -19,7 +19,7 @@ fn decode_league(data: Dynamic) League![decode::Error] {
   })
 }
 
-fn get_all(db: sqlite::Database) [League]!Str {
+fn get_all(db: sql::Connection) [League]!Str {
   let rows = try db.query("select * from leagues order by name asc").all(["_": ()])
   mut leagues: [League] = []
   for row in rows {
@@ -32,7 +32,7 @@ fn get_all(db: sqlite::Database) [League]!Str {
 }
 
 // a Set would be great
-fn get_ignored(db: sqlite::Database) [Int:Bool] {
+fn get_ignored(db: sql::Connection) [Int:Bool] {
   mut ignored: [Int:Bool] = [:]
   let rows = try db.query("select id from ignored_league").all(["": ()]) -> _ { ignored }
 

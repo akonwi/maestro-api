@@ -7,7 +7,7 @@ use ard/fs
 use ard/http
 use ard/io
 use ard/json
-use ard/sqlite
+use ard/sql
 
 use maestro/config
 use maestro/db as _db
@@ -239,7 +239,7 @@ fn pick_cleansheet_lines(odd: odds::Stat, stats: Snapshot, mut entry: FixturePic
   }
 }
 
-private fn save_juice(db: sqlite::Database, id: Str, raw: Str) Void!Str {
+private fn save_juice(db: sql::Connection, id: Str, raw: Str) Void!Str {
   io::print("Saving juice: {id}")
   let rows = try db.query("SELECT id FROM juice WHERE id = @id").first(["id": id])
   let sql = match rows.is_some() {
@@ -325,7 +325,7 @@ fn find_juice_worker() {
   }
 }
 
-fn get_juice(db: sqlite::Database, date: Str) Str!Str {
+fn get_juice(db: sql::Connection, date: Str) Str!Str {
   let id = match date.is_empty() {
     true => dates::get_today(),
     false => date

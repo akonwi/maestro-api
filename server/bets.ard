@@ -3,7 +3,7 @@ use ard/decode
 use ard/duration
 use ard/io
 use ard/maybe
-use ard/sqlite
+use ard/sql
 
 use maestro/db as _db
 use maestro/matches
@@ -77,9 +77,9 @@ fn decode_bets(rows: [Dynamic]) [Bet]!Str {
   Result::ok(bets)
 }
 
-fn get_all(db: sqlite::Database) [Bet]!Str {
+fn get_all(db: sql::Connection) [Bet]!Str {
   let query = db.query("select * from bets")
-  let vals: [Str:sqlite::Value] = [:]
+  let vals: [Str:sql::Value] = [:]
   let rows = try query.all(vals)
   decode_bets(rows)
 }
@@ -92,7 +92,7 @@ struct ResultPage{
 
 let PAGE_SIZE = 10
 
-fn get_all_paged(db: sqlite::Database, after: Int?) ResultPage!Str {
+fn get_all_paged(db: sql::Connection, after: Int?) ResultPage!Str {
   let query_str = match after {
     cursor => "SELECT * FROM bets where id < @cursor ORDER BY id DESC LIMIT @limit",
     _ => "SELECT * FROM bets ORDER BY id DESC LIMIT @limit",
@@ -124,13 +124,13 @@ fn get_all_paged(db: sqlite::Database, after: Int?) ResultPage!Str {
   })
 }
 
-fn find_by_match(db: sqlite::Database, match_id: Int) [Bet]!Str {
+fn find_by_match(db: sql::Connection, match_id: Int) [Bet]!Str {
   let query = db.query("select * from bets where match_id = @match_id")
   let rows = try query.all(["match_id": match_id])
   decode_bets(rows)
 }
 
-fn find_by_outcome(db: sqlite::Database, outcome: Outcome) [Bet]!Str {
+fn find_by_outcome(db: sql::Connection, outcome: Outcome) [Bet]!Str {
   let query = db.query("select * from bets where result = @outcome")
   let rows = try query.all(["outcome": outcome.to_str()])
   decode_bets(rows)
@@ -147,7 +147,7 @@ struct Overview {
   roi: Float,
 }
 
-fn get_overview(db: sqlite::Database) Overview!Str {
+fn get_overview(db: sql::Connection) Overview!Str {
   let amount_data = try db.query("SELECT COALESCE(SUM(amount), 0) as value FROM bets").first(["_": 0])
   let total_wagered = match amount_data {
     row => {
@@ -227,7 +227,7 @@ fn catch(errs: [decode::Error]) Bet!Str {
 }
 
 // todo: use a union for the error type - could be bad inputs or db error
-fn create(db: sqlite::Database, input: Dynamic) Bet!Str {
+fn create(db: sql::Connection, input: Dynamic) Bet!Str {
   let match_id = try decode_match_id(input) -> catch
   let type_id = try decode_type_id(input) -> catch
   let name = try decode_name(input) -> catch
@@ -237,7 +237,7 @@ fn create(db: sqlite::Database, input: Dynamic) Bet!Str {
   let outcome = Outcome::pending.to_str()
 
   let insert = db.query("INSERT INTO bets (match_id, type_id, name, amount, line, odds, result) VALUES (@match_id, @type_id, @name, @amount, @line, @odds, @result) RETURNING id")
-  let values: [Str:sqlite::Value] = [
+  let values: [Str:sql::Value] = [
     "match_id": match_id,
     "type_id": type_id,
     "name": name,
@@ -267,47 +267,47 @@ fn create(db: sqlite::Database, input: Dynamic) Bet!Str {
 }
 
 // currently only supporting changing the result
-fn update(db: sqlite::Database, id: Int, input: Dynamic) Void!Str {
+fn update(db: sql::Connection, id: Int, input: Dynamic) Void!Str {
   let outcome = try decode_result(input) -> errs {
     Result::err("Invalid input.result: {errs.at(0)}")
   }
-  let values: [Str:sqlite::Value] = ["id": id, "outcome": outcome]
+  let values: [Str:sql::Value] = ["id": id, "outcome": outcome]
   db.query("UPDATE bets SET result = @outcome where id = @id").run(values)
 }
 
-fn delete(db: sqlite::Database, id: Int) Void!Str {
+fn delete(db: sql::Connection, id: Int) Void!Str {
   db.query("DELETE FROM bets WHERE id = @id").run(["id": id])
 }
 
-fn resolve_team_total(db: sqlite::Database, bet: Bet, goals: Int) Void!Str {
+fn resolve_team_total(db: sql::Connection, bet: Bet, goals: Int) Void!Str {
   let outcome = match Float::from_int(goals) > bet.line {
     true => Outcome::win,
     false => Outcome::lose
   }
-  let values: [Str:sqlite::Value] = ["id": bet.id, "outcome": outcome.to_str()]
+  let values: [Str:sql::Value] = ["id": bet.id, "outcome": outcome.to_str()]
   db.query("UPDATE bets SET result = @outcome where id = @id").run(values)
 }
 
-fn resolve_team_cleansheet(db: sqlite::Database, bet: Bet, opp_goals: Int) Void!Str {
+fn resolve_team_cleansheet(db: sql::Connection, bet: Bet, opp_goals: Int) Void!Str {
   let outcome = match opp_goals {
     0 => Outcome::win,
     _ => Outcome::lose
   }
-  let values: [Str:sqlite::Value] = ["id": bet.id, "outcome": outcome.to_str()]
+  let values: [Str:sql::Value] = ["id": bet.id, "outcome": outcome.to_str()]
   db.query("UPDATE bets SET result = @outcome where id = @id").run(values)
 }
 
-fn resolve_money_line(db: sqlite::Database, bet: Bet, fixture: matches::Match) Void!Str {
+fn resolve_money_line(db: sql::Connection, bet: Bet, fixture: matches::Match) Void!Str {
   let outcome = match {
     bet.name.contains("Home") and fixture.home_goals > fixture.away_goals => Outcome::win,
     bet.name.contains("Away") and fixture.away_goals > fixture.home_goals => Outcome::win,
     _ => Outcome::lose
   }
-  let values: [Str:sqlite::Value] = ["id": bet.id, "outcome": outcome.to_str()]
+  let values: [Str:sql::Value] = ["id": bet.id, "outcome": outcome.to_str()]
   db.query("UPDATE bets SET result = @outcome where id = @id").run(values)
 }
 
-fn process_bet(db: sqlite::Database, bet: Bet) Void!Str {
+fn process_bet(db: sql::Connection, bet: Bet) Void!Str {
   let fixture = try matches::get(bet.match_id)
   if fixture.status == "FT" {
     match bet.type_id {
