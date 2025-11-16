@@ -52,7 +52,7 @@ fn main() {
   let conn = db::connect()
   db::init(conn)
 
-  let secret = config::api_password()
+  let secret = config::api_key()
   fn is_authorized(header: Str?) Bool {
     match header {
       h => secret == h,
@@ -243,6 +243,7 @@ fn main() {
 
       "/leagues/:id/hide": fn(req: http::Request) http::Response {
         match req.method {
+          http::Method::Options => empty_200(),
           http::Method::Post => {
             match Int::from_str(req.path_param("id")) {
               id => conn.query("INSERT INTO ignored_league (id) VALUES (@id)").run(["id": id]),

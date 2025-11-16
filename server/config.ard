@@ -1,11 +1,8 @@
 use ard/env
 
+// key for API-Football and will act as a password for writing data
 fn api_key() Str {
   env::get("API_KEY").expect("API_KEY environment variable not set")
-}
-
-fn api_password() Str {
-  env::get("API_TOKEN").expect("API_TOKEN environment variable not set")
 }
 
 fn port() Int {
