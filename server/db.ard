@@ -7,8 +7,7 @@ fn connect() sql::Connection {
   sql::open(db_path).expect("Failed connect to database at {db_path}")
 }
 
-// migrations
-fn init(db: sql::Connection) {
+fn migrate(db: sql::Connection) {
   db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
     .expect("Failed to create leagues table")
   db.exec(
@@ -56,4 +55,14 @@ fn init(db: sql::Connection) {
       id INTEGER PRIMARY KEY
     )"
   )
+
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS followed_leagues (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL
+    );
+    "
+  ).expect("Failed to create followed_leagues table")
+
+  io::print("migrations completed")
 }

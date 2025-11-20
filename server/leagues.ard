@@ -4,23 +4,20 @@ use ard/sql
 struct League {
   id: Int,
   name: Str,
-  code: Str,
 }
 
 fn decode_league(data: Dynamic) League![decode::Error] {
   let id = try decode::run(data, decode::field("id", decode::int))
   let name = try decode::run(data, decode::field("name", decode::string))
-  let code = try decode::run(data, decode::field("code", decode::string))
 
   Result::ok(League{
     id: id,
     name: name,
-    code: code,
   })
 }
 
 fn get_all(db: sql::Connection) [League]!Str {
-  let rows = try db.query("select * from leagues order by name asc").all(["_": ()])
+  let rows = try db.query("SELECT * FROM followed_leagues GROUP BY id").all(["_": ()])
   mut leagues: [League] = []
   for row in rows {
     let league = try decode_league(row) -> errs {
@@ -31,7 +28,7 @@ fn get_all(db: sql::Connection) [League]!Str {
   Result::ok(leagues)
 }
 
-// a Set would be great
+// a Set data struct would be great
 fn get_ignored(db: sql::Connection) [Int:Bool] {
   mut ignored: [Int:Bool] = [:]
   let rows = try db.query("select id from ignored_league").all(["": ()]) -> _ { ignored }
@@ -43,4 +40,30 @@ fn get_ignored(db: sql::Connection) [Int:Bool] {
     }
   }
   ignored
+}
+
+let decode_id = decode::field("id", decode::int)
+let decode_name = decode::field("name", decode::string)
+
+struct FollowInput {
+  id: Int,
+  name: Str,
+}
+
+fn decode_follow_request(data: Dynamic) FollowInput![decode::Error] {
+  let id = try decode_id(data)
+  let name = try decode_name(data)
+
+  Result::ok(FollowInput{
+    id: id,
+    name: name,
+  })
+}
+
+fn follow(db: sql::Connection, input: FollowInput) Void!Str {
+  let values: [Str : sql::Value] = [
+    "id": input.id,
+    "name": input.name,
+  ]
+  db.query("INSERT INTO followed_leagues (id, name) VALUES (@id, @name)").run(values)
 }
