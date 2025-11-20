@@ -1,0 +1,37 @@
+use ard/decode
+use ard/sql
+
+use maestro/leagues
+
+let decode_league_id = decode::field("league_id", decode::int)
+let decode_team_id = decode::field("team_id", decode::int)
+let decode_season = decode::field("season", decode::int)
+let decode_league_name = decode::field("league_name", decode::string)
+
+struct FollowRequest {
+  league_id: Int,
+  league_name: Str,
+  team_id: Int,
+  season: Int,
+}
+
+fn decode_follow_request(data: Dynamic) FollowRequest![decode::Error] {
+  let league_id = try decode_league_id(data)
+  let league_name = try decode_league_name(data)
+  let team_id = try decode_team_id(data)
+  let season = try decode_season(data)
+
+  Result::ok(FollowRequest{
+    league_id: league_id,
+    league_name: league_name,
+    team_id: team_id,
+    season: season,
+  })
+}
+
+fn follow(db: sql::Connection, input: FollowRequest) Void!Str {
+  try leagues::save(db, input.league_id, input.league_name)
+  // save to followed_team
+}
+
+fn sync() {}
