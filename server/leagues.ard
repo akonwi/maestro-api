@@ -1,5 +1,8 @@
 use ard/decode
+use ard/http
 use ard/sql
+
+use maestro/config
 
 struct League {
   id: Int,
@@ -66,4 +69,26 @@ fn follow(db: sql::Connection, input: FollowInput) Void!Str {
     "name": input.name,
   ]
   db.query("INSERT INTO followed_leagues (id, name) VALUES (@id, @name)").run(values)
+}
+
+fn get_current_season(id: Int) Int!Str {
+  let req = http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/leagues?id={id}&current=true",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+      "Accept": "application/json",
+    ],
+  }
+
+  let res = try http::send(req) -> err { Result::err("Error fetching fixtures: {err}") }
+  let body = try decode::from_json(res.body) -> found { Result::err("Unable to parse response body as JSON. Found {found}") }
+
+  let dig_out_season = decode::field("response", decode::at(0, decode::field("seasons", decode::at(0, decode::field("year", decode::int)))))
+
+  let season = try decode::run(body, dig_out_season) -> errs {
+    Result::err(errs.at(0).to_str())
+  }
+
+  Result::ok(season)
 }
