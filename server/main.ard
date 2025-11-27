@@ -63,6 +63,7 @@ fn main() {
   // start fiber for updating db regularly
   async::start(predictions::find_juice_worker)
   async::start(bets::update_outcomes)
+  async::start(fn() { fixtures::sync(conn) })
 
   let port = config::port()
   io::print("starting on port {port}")

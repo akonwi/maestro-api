@@ -1,0 +1,259 @@
+use ard/decode
+use ard/http
+use ard/io
+use ard/sql
+
+use maestro/config
+use maestro/leagues
+
+// todo: put this in ard/decode
+fn dynamic(data: Dynamic) Dynamic![decode::Error] {
+  Result::ok(data)
+}
+
+enum Status {
+  not_started,
+  finished
+}
+
+struct Fixture {
+  id: Int,
+  league_id: Int,
+  timestamp: Int,
+  status: Status,
+  home_id: Int,
+  away_id: Int,
+  home_goals: Int,
+  away_goals: Int,
+}
+
+let finished_statuses = ["FT", "AET", "PEN", "WO", "AWD"]
+
+fn decode_short_status(data: Dynamic) Status![decode::Error] {
+  let api_status = try decode::string(data)
+
+  mut status = Status::not_started
+  for s in finished_statuses {
+    if s == api_status {
+      status = Status::finished
+      break
+    }
+  }
+
+  Result::ok(status)
+}
+
+fn collapse_errors(prefix: Str, errors: [decode::Error]) Str {
+  mut msg = prefix
+  for e in errors {
+    msg = "{msg}: {e}"
+  }
+  msg
+}
+
+fn print_errors(errors: [decode::Error]) {
+  io::print(collapse_errors("", errors))
+}
+
+fn fetch(id: Int) Dynamic!Str {
+  let req = http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/fixtures?id={id}",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+      "Accept": "application/json",
+    ],
+  }
+
+  let res = try http::send(req) -> err { Result::err("Error fetching fixture (id={id}): {err}") }
+  let body = try decode::from_json(res.body) -> found { Result::err("Unable to parse response body as JSON (league={id}). Found {found}") }
+  let entry = try decode::run(body, decode::field("response", decode::at(0, dynamic))) -> errs { Result::err(collapse_errors("", errs)) }
+  Result::ok(entry)
+}
+
+struct TeamStats {
+  id: Int,
+  shots: Int,
+  shots_on_goal: Int,
+  shots_off_goal: Int,
+  shots_blocked: Int,
+  shots_in_box: Int,
+  shots_out_box: Int,
+  corners: Int,
+  offsides: Int,
+  possession: Float,
+  passes: Int,
+  passes_completed: Int,
+  xg: Float,
+  goals_prevented: Int,
+  fouls: Int,
+}
+
+struct FixtureStats {
+  home: TeamStats,
+  away: TeamStats,
+}
+
+fn decode_team_stats(entry: Dynamic) TeamStats![decode::Error] {
+  let id = try decode::run(entry, decode::path(["team", "id"], decode::int))
+
+  mut passes = 0
+  mut passes_completed = 0
+  mut shots = 0
+  mut shots_on_goal = 0
+  mut shots_off_goal = 0
+  mut shots_blocked = 0
+  mut shots_in_box = 0
+  mut shots_out_box = 0
+  mut possession = 0.0
+  mut xg = 0.0
+  mut corners = 0
+  mut offsides = 0
+
+  mut fouls = 0
+  mut yellow_cards = 0
+  mut red_cards = 0
+  mut goals_prevented = 0
+
+  // just loop through the statistics and pluck values
+  try decode::run(entry, decode::field("statistics", decode::list(fn (data: Dynamic) Void![decode::Error] {
+    let name = try decode::run(data, decode::field("type", decode::string))
+
+    let decode_int_value = decode::field("value", fn(data: Dynamic) Int![decode::Error] {
+      match decode::is_void(data) {
+        true => Result::ok(0),
+        false => decode::run(data, decode::int)
+      }
+    })
+    let decode_float_value = decode::field("value", fn(data: Dynamic) Float![decode::Error] {
+      let str = try decode::run(data, decode::string)
+      let val = Float::from_str(str.replace(old: "%", new: "")).or(0.0)
+      Result::ok(val)
+    })
+
+    match {
+      name == "Total Shots" => { shots = try decode::run(data, decode_int_value) },
+      name == "Shots on Goal" => { shots_on_goal = try decode::run(data, decode_int_value) },
+      name == "Shots off Goal" => { shots_off_goal = try decode::run(data, decode_int_value) },
+      name == "Blocked Shots" => { shots_blocked = try decode::run(data, decode_int_value) },
+      name == "Shots insidebox" => { shots_in_box = try decode::run(data, decode_int_value) },
+      name == "Shots outsidebox" => { shots_out_box = try decode::run(data, decode_int_value) },
+      name == "Fouls" => { fouls = try decode::run(data, decode_int_value) },
+      name == "Corner Kicks" => { corners = try decode::run(data, decode_int_value) },
+      name == "Offsides" => { offsides = try decode::run(data, decode_int_value) },
+      name == "Ball Possession" => { possession = try decode::run(data, decode_float_value) },
+      name == "Yellow Cards" => { yellow_cards = try decode::run(data, decode_int_value) },
+      name == "Red Cards" => { red_cards = try decode::run(data, decode_int_value) },
+      name == "Total passes" => { passes = try decode::run(data, decode_int_value) },
+      name == "Passes accurate" => { passes_completed = try decode::run(data, decode_int_value) },
+      name == "expected_goals" => { xg = try decode::run(data, decode_float_value) },
+      name == "goals_prevented" => { goals_prevented = try decode::run(data, decode_int_value) },
+      _ => ()
+    }
+
+    Result::ok(())
+  })))
+
+  Result::ok(TeamStats{
+    id: id,
+    passes: passes,
+    passes_completed: passes_completed,
+    shots: shots,
+    shots_blocked: shots_blocked,
+    shots_on_goal: shots_on_goal,
+    shots_off_goal: shots_off_goal,
+    shots_in_box: shots_in_box,
+    shots_out_box: shots_out_box,
+    offsides: offsides,
+    corners: corners,
+    possession: possession,
+    xg: xg,
+    goals_prevented: goals_prevented,
+    fouls: fouls,
+  })
+}
+
+fn decode_stats(entry: Dynamic) FixtureStats![decode::Error] {
+
+}
+
+fn sync_season(db: sql::Connection, league_id: Int, season: Int) {
+  // check whether there are any fixtures already in the db
+  let row = try db.query("SELECT count(*) FROM fixtures WHERE league_id = @league_id AND season = @season")
+  .first(["league_id": league_id, "season": season]) -> err {
+    io::print("Unable to get fixture count for league {league_id} season {season}: {err}")
+  }
+  let count = try decode::run(row.expect("foobar"), decode::field("count", decode::int)) -> errs {
+    io::print("Unable to parse fixture count for league: {league_id} season: {season}: {collapse_errors("", errs)}")
+  }
+
+  match count {
+    0 => {
+      // there are no fixtures saved, so fetch and save them
+      let req = http::Request{
+        method: http::Method::Get,
+        url: "https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}",
+        headers: [
+          "x-rapidapi-key": config::api_key(),
+          "Accept": "application/json",
+        ],
+      }
+
+      let res = try http::send(req) -> err { io::print("Error fetching fixtures (league={league_id}, season={season}): {err}") }
+      let body = try decode::from_json(res.body) -> found { io::print("Unable to parse response body as JSON (league={league_id}, season={season}). Found {found}") }
+      let fixture_ids = try decode::run(body, decode::field("response", decode::list(decode::path(["fixture", "id"], decode::int)))) -> print_errors
+
+      for fixture_id in fixture_ids {
+        let entry = try fetch(fixture_id) -> err { io::print(err) }
+
+        // fixture info
+        let timestamp = try decode::run(entry, decode::path(["fixture", "timestamp"], decode::int)) -> print_errors
+        let status = try decode::run(entry, decode::path(["fixture", "status", "short"], decode_short_status)) -> print_errors
+        let home_id = try decode::run(entry, decode::path(["teams", "home", "id"], decode::int)) -> print_errors
+        let away_id = try decode::run(entry, decode::path(["teams", "away", "id"], decode::int)) -> print_errors
+        let home_goals = try decode::run(entry, decode::path(["goals", "home"], decode::nullable(decode::int))) -> print_errors
+        let away_goals = try decode::run(entry, decode::path(["goals", "away"], decode::nullable(decode::int))) -> print_errors
+
+        let stats = match status {
+          Status::finished => {
+            try decode_stats(entry) -> print_errors
+          },
+          _ => {
+            let stats = TeamStats{
+              id: 0,
+              shots: 0,
+              shots_on_goal: 0,
+              shots_off_goal: 0,
+              shots_blocked: 0,
+              shots_in_box: 0,
+              shots_out_box: 0,
+              xg: 0.0,
+              possession: 0.0,
+              passes: 0,
+              passes_completed: 0,
+              fouls: 0,
+              corners: 0,
+              goals_prevented: 0,
+              offsides: 0,
+            }
+            FixtureStats{ home: stats, away: stats }
+          }
+        }
+
+        // save
+      }
+    },
+    // else, look for incomplete fixtures and update them
+    1 => {}
+  }
+}
+
+fn sync(db: sql::Connection) {
+  let all_leagues = try leagues::get_all(db) -> err { io::print("Unable to get leagues for fixture sync: {err}") }
+  for league in all_leagues {
+    match leagues::get_current_season(league.id) {
+      ok(season) => sync_season(db: db, league_id: league.id, season: season),
+      err => io::print("Unable to get current season for league {league.id}: {err}")
+    }
+  }
+}
