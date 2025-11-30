@@ -64,39 +64,20 @@ fn migrate(db: sql::Connection) {
     "
   ).expect("Failed to create followed_leagues table")
 
-  db.exec("CREATE TABLE IF NOT EXISTS fixtures (
-    id INTEGER PRIMARY KEY,
-    league_id INTEGER,
-    season INTEGER,
-    home_id INTEGER,
-    away_id INTEGER,
-    timestamp INTEGER,
-    status TEXT,
-    home_goals INTEGER,
-    away_goals INTEGER,
-    home_shots INTEGER,
-    home_shots_on_goal INTEGER,
-    home_possession REAL,
-    home_passes INTEGER,
-    home_passes_accurate INTEGER,
-    home_fouls INTEGER,
-    home_corners INTEGER,
-    home_offsides INTEGER,
-    home_yellow_cards INTEGER,
-    home_red_cards INTEGER,
-    away_shots INTEGER,
-    away_shots_on_goal INTEGER,
-    away_possession REAL,
-    away_passes INTEGER,
-    away_passes_accurate INTEGER,
-    away_fouls INTEGER,
-    away_corners INTEGER,
-    away_offsides INTEGER,
-    away_yellow_cards INTEGER,
-    away_red_cards INTEGER,
-    synced_at INTEGER,
-    FOREIGN KEY (league_id) REFERENCES followed_leagues(id)
-  )").expect("Failed to create fixtures table")
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS fixtures (
+      id INTEGER PRIMARY KEY,
+      league_id INTEGER,
+      season INTEGER,
+      home_id INTEGER,
+      away_id INTEGER,
+      timestamp INTEGER,
+      status TEXT,
+      home_goals INTEGER,
+      away_goals INTEGER,
+      FOREIGN KEY (league_id) REFERENCES followed_leagues(id)
+    )"
+  ).expect("Failed to create fixtures table")
 
   db.exec("CREATE INDEX IF NOT EXISTS idx_fixtures_league_season ON fixtures(league_id, season)")
     .expect("Failed to create idx_fixtures_league_season")
@@ -106,6 +87,38 @@ fn migrate(db: sql::Connection) {
     .expect("Failed to create idx_fixtures_away_team")
   db.exec("CREATE INDEX IF NOT EXISTS idx_fixtures_status ON fixtures(status)")
     .expect("Failed to create idx_fixtures_status")
+
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS fixture_stats (
+      fixture_id INTEGER,
+      team_id INTEGER,
+      league_id INTEGER,
+      season INTEGER,
+      shots INTEGER,
+      shots_on_goal INTEGER,
+      shots_blocked INTEGER,
+      shots_in_box INTEGER,
+      shots_out_box INTEGER,
+      possession REAL,
+      passes INTEGER,
+      passes_completed INTEGER,
+      fouls INTEGER,
+      corners INTEGER,
+      offsides INTEGER,
+      yellow_cards INTEGER,
+      red_cards INTEGER,
+      xg REAL,
+      goals_prevented INTEGER,
+      PRIMARY KEY (fixture_id, team_id),
+      FOREIGN KEY (fixture_id) REFERENCES fixtures(id),
+      FOREIGN KEY (league_id) REFERENCES followed_leagues(id)
+    )"
+  ).expect("Failed to create fixture_stats table")
+
+  db.exec("CREATE INDEX IF NOT EXISTS idx_fixture_stats_team_league_season ON fixture_stats(team_id, league_id, season)")
+    .expect("Failed to create idx_fixture_stats_team_league_season")
+  db.exec("CREATE INDEX IF NOT EXISTS idx_fixture_stats_league_season ON fixture_stats(league_id, season)")
+    .expect("Failed to create idx_fixture_stats_league_season")
 
   io::print("migrations completed")
 }

@@ -16,6 +16,15 @@ enum Status {
   finished
 }
 
+impl Str::ToString for Status {
+  fn to_str() Str {
+    match @ {
+      Status::not_started => "not_started",
+      Status::finished => "finished",
+    }
+  }
+}
+
 struct Fixture {
   id: Int,
   league_id: Int,
@@ -87,6 +96,8 @@ struct TeamStats {
   xg: Float,
   goals_prevented: Int,
   fouls: Int,
+  yellow_cards: Int,
+  red_cards: Int,
 }
 
 struct FixtureStats {
@@ -170,12 +181,218 @@ fn decode_team_stats(entry: Dynamic) TeamStats![decode::Error] {
     xg: xg,
     goals_prevented: goals_prevented,
     fouls: fouls,
+    yellow_cards: yellow_cards,
+    red_cards: red_cards,
   })
 }
 
 fn decode_stats(entry: Dynamic) FixtureStats![decode::Error] {
+  let teams_stats = try decode::run(entry, decode::field("statistics", decode::list(decode_team_stats)))
 
+  Result::ok(FixtureStats{
+    home: teams_stats.at(0),
+    away: teams_stats.at(1),
+  })
 }
+
+fn import_season(db: sql::Connection, league_id: Int, season: Int) Void!Str {
+  // there are no fixtures saved, so fetch and save them
+  let req = http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+      "Accept": "application/json",
+    ],
+  }
+
+  let res = try http::send(req) -> err { Result::err("Error fetching fixtures (league={league_id}, season={season}): {err}") }
+  let body = try decode::from_json(res.body) -> found { Result::err("Unable to parse response body as JSON (league={league_id}, season={season}). Found {found}") }
+  let fixture_ids = try decode::run(body, decode::field("response", decode::list(decode::path(["fixture", "id"], decode::int)))) -> errs {
+    Result::err(collapse_errors("Unable to decode ids of fixtures (league={league_id}, season={season})", errs))
+  }
+
+  for fixture_id in fixture_ids {
+    let entry = try fetch(fixture_id) -> err { Result::err("Error fetching fixture (id={fixture_id}): {err}") }
+
+    // fixture info
+    let timestamp = try decode::run(entry, decode::path(["fixture", "timestamp"], decode::int)) -> errs { Result::err(collapse_errors("", errs)) }
+    let status = try decode::run(entry, decode::path(["fixture", "status", "short"], decode_short_status)) -> errs { Result::err(collapse_errors("", errs)) }
+    let home_id = try decode::run(entry, decode::path(["teams", "home", "id"], decode::int)) -> errs { Result::err(collapse_errors("", errs)) }
+    let away_id = try decode::run(entry, decode::path(["teams", "away", "id"], decode::int)) -> errs { Result::err(collapse_errors("", errs)) }
+    let home_goals = try decode::run(entry, decode::path(["goals", "home"], decode::nullable(decode::int))) -> errs { Result::err(collapse_errors("", errs)) }
+    let away_goals = try decode::run(entry, decode::path(["goals", "away"], decode::nullable(decode::int))) -> errs { Result::err(collapse_errors("", errs)) }
+
+    let stats = match status {
+      Status::finished => {
+        try decode_stats(entry) -> errs { Result::err(collapse_errors("", errs)) }
+      },
+      _ => {
+        let stats = TeamStats{
+          id: 0,
+          shots: 0,
+          shots_on_goal: 0,
+          shots_off_goal: 0,
+          shots_blocked: 0,
+          shots_in_box: 0,
+          shots_out_box: 0,
+          xg: 0.0,
+          possession: 0.0,
+          passes: 0,
+          passes_completed: 0,
+          fouls: 0,
+          corners: 0,
+          goals_prevented: 0,
+          offsides: 0,
+          yellow_cards: 0,
+          red_cards: 0,
+        }
+        FixtureStats{ home: stats, away: stats }
+      }
+    }
+
+    let fixture_values: [Str : sql::Value] = [
+      "id": fixture_id,
+      "league_id": league_id,
+      "season": season,
+      "home_id": home_id,
+      "away_id": away_id,
+      "timestamp": timestamp,
+      "status": status.to_str(),
+      "home_goals": home_goals.or(0),
+      "away_goals": away_goals.or(0),
+
+      "home_shots": stats.home.shots,
+      "away_shots": stats.away.shots,
+      "home_shots_on_goal": stats.home.shots_on_goal,
+      "away_shots_on_goal": stats.away.shots_on_goal,
+      "home_shots_blocked": stats.home.shots_blocked,
+      "away_shots_blocked": stats.away.shots_blocked,
+      "home_shots_in_box": stats.home.shots_in_box,
+      "away_shots_in_box": stats.away.shots_in_box,
+      "home_shots_out_box": stats.home.shots_out_box,
+      "away_shots_out_box": stats.away.shots_out_box,
+      "home_possession": stats.home.possession,
+      "away_possession": stats.away.possession,
+      "home_passes": stats.home.passes,
+      "away_passes": stats.away.passes,
+      "home_passes_completed": stats.home.passes_completed,
+      "away_passes_completed": stats.away.passes_completed,
+      "home_fouls": stats.home.fouls,
+      "away_fouls": stats.away.fouls,
+      "home_corners": stats.home.corners,
+      "away_corners": stats.away.corners,
+      "home_offsides": stats.home.offsides,
+      "away_offsides": stats.away.offsides,
+      "home_yellow_cards": stats.home.yellow_cards,
+      "away_yellow_cards": stats.away.yellow_cards,
+      "home_red_cards": stats.home.red_cards,
+      "away_red_cards": stats.away.red_cards,
+      "home_xg": stats.home.xg,
+      "away_xg": stats.away.xg,
+      "home_goals_prevented": stats.home.goals_prevented,
+      "away_goals_prevented": stats.away.goals_prevented,
+    ]
+
+    try db.query(
+      "BEGIN;
+
+      INSERT INTO fixtures (id, league_id, season, home_id, away_id, timestamp, status, home_goals, away_goals)
+      VALUES (@id, @league_id, @season, @home_id, @away_id, @timestamp, @status, @home_goals, @away_goals);
+
+      INSERT INTO fixture_stats (
+        fixture_id,
+        team_id,
+        league_id,
+        season,
+        shots,
+        shots_on_goal,
+        shots_blocked,
+        shots_in_box,
+        shots_out_box,
+        possession,
+        passes,
+        passes_completed,
+        fouls,
+        corners,
+        offsides,
+        yellow_cards,
+        red_cards,
+        xg,
+        goals_prevented
+      )
+      VALUES (
+        @id,
+        @home_id,
+        @league_id,
+        @season,
+        @home_shots,
+        @home_shots_on_goal,
+        @home_shots_blocked,
+        @home_shots_in_box,
+        @home_shots_out_box,
+        @home_possession,
+        @home_passes,
+        @home_passes_completed,
+        @home_fouls,
+        @home_corners,
+        @home_offsides,
+        @home_yellow_cards,
+        @home_red_cards,
+        @home_xg,
+        @home_goals_prevented,
+      );
+
+      INSERT INTO fixture_stats (
+        fixture_id,
+        team_id,
+        league_id,
+        season,
+        shots,
+        shots_on_goal,
+        shots_blocked,
+        shots_in_box,
+        shots_out_box,
+        possession,
+        passes,
+        passes_completed,
+        fouls,
+        corners,
+        offsides,
+        yellow_cards,
+        red_cards,
+        xg,
+        goals_prevented
+      )
+      VALUES (
+        @id,
+        @away_id,
+        @league_id,
+        @season,
+        @away_shots,
+        @away_shots_on_goal,
+        @away_shots_blocked,
+        @away_shots_in_box,
+        @away_shots_out_box,
+        @away_possession,
+        @away_passes,
+        @away_passes_completed,
+        @away_fouls,
+        @away_corners,
+        @away_offsides,
+        @away_yellow_cards,
+        @away_red_cards,
+        @away_xg,
+        @away_goals_prevented,
+      );
+
+      COMMIT;"
+    ).run(fixture_values) -> err { Result::err("Unable to save fixture {fixture_id}: {err}") }
+  }
+
+  Result::ok(())
+}
+
 
 fn sync_season(db: sql::Connection, league_id: Int, season: Int) {
   // check whether there are any fixtures already in the db
@@ -189,58 +406,18 @@ fn sync_season(db: sql::Connection, league_id: Int, season: Int) {
 
   match count {
     0 => {
-      // there are no fixtures saved, so fetch and save them
-      let req = http::Request{
-        method: http::Method::Get,
-        url: "https://v3.football.api-sports.io/fixtures?league={league_id}&season={season}",
-        headers: [
-          "x-rapidapi-key": config::api_key(),
-          "Accept": "application/json",
-        ],
-      }
-
-      let res = try http::send(req) -> err { io::print("Error fetching fixtures (league={league_id}, season={season}): {err}") }
-      let body = try decode::from_json(res.body) -> found { io::print("Unable to parse response body as JSON (league={league_id}, season={season}). Found {found}") }
-      let fixture_ids = try decode::run(body, decode::field("response", decode::list(decode::path(["fixture", "id"], decode::int)))) -> print_errors
-
-      for fixture_id in fixture_ids {
-        let entry = try fetch(fixture_id) -> err { io::print(err) }
-
-        // fixture info
-        let timestamp = try decode::run(entry, decode::path(["fixture", "timestamp"], decode::int)) -> print_errors
-        let status = try decode::run(entry, decode::path(["fixture", "status", "short"], decode_short_status)) -> print_errors
-        let home_id = try decode::run(entry, decode::path(["teams", "home", "id"], decode::int)) -> print_errors
-        let away_id = try decode::run(entry, decode::path(["teams", "away", "id"], decode::int)) -> print_errors
-        let home_goals = try decode::run(entry, decode::path(["goals", "home"], decode::nullable(decode::int))) -> print_errors
-        let away_goals = try decode::run(entry, decode::path(["goals", "away"], decode::nullable(decode::int))) -> print_errors
-
-        let stats = match status {
-          Status::finished => {
-            try decode_stats(entry) -> print_errors
-          },
-          _ => {
-            let stats = TeamStats{
-              id: 0,
-              shots: 0,
-              shots_on_goal: 0,
-              shots_off_goal: 0,
-              shots_blocked: 0,
-              shots_in_box: 0,
-              shots_out_box: 0,
-              xg: 0.0,
-              possession: 0.0,
-              passes: 0,
-              passes_completed: 0,
-              fouls: 0,
-              corners: 0,
-              goals_prevented: 0,
-              offsides: 0,
-            }
-            FixtureStats{ home: stats, away: stats }
-          }
+      match import_season(db: db, league_id: league_id, season: season) {
+        ok => (),
+        err => {
+          // clean up since the import wasn't successful
+          // todo: support transactions in ard/sql
+          io::print("Failed to import season (league_id={league_id}, season={season}): {err}")
+          db.query("BEGIN;
+            DELETE FROM fixtures WHERE league_id = @league_id AND season = @season;
+            DELETE FROM fixture_stats WHERE league_id = @league_id AND season = @season;
+            COMMIT;
+          ").run(["league_id": league_id, "season": season])
         }
-
-        // save
       }
     },
     // else, look for incomplete fixtures and update them
