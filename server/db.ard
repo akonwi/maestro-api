@@ -72,7 +72,7 @@ fn migrate(db: sql::Database) {
       home_id INTEGER,
       away_id INTEGER,
       timestamp INTEGER,
-      status TEXT,
+      finished BOOL,
       home_goals INTEGER,
       away_goals INTEGER,
       FOREIGN KEY (league_id) REFERENCES followed_leagues(id)
@@ -85,8 +85,8 @@ fn migrate(db: sql::Database) {
     .expect("Failed to create idx_fixtures_home_team")
   db.exec("CREATE INDEX IF NOT EXISTS idx_fixtures_away_team ON fixtures(away_id, league_id, season)")
     .expect("Failed to create idx_fixtures_away_team")
-  db.exec("CREATE INDEX IF NOT EXISTS idx_fixtures_status ON fixtures(status)")
-    .expect("Failed to create idx_fixtures_status")
+  db.exec("CREATE INDEX IF NOT EXISTS idx_fixtures_finished ON fixtures(finished)")
+    .expect("Failed to create idx_fixtures_finished")
 
   db.exec(
     "CREATE TABLE IF NOT EXISTS fixture_stats (
