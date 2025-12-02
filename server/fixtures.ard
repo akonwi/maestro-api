@@ -213,6 +213,7 @@ fn import_season(db: sql::Connection, league_id: Int, season: Int) Void!Str {
   }
 
   for fixture_id in fixture_ids {
+    io::print("Saving fixture={fixture_id}")
     let entry = try fetch(fixture_id) -> err { Result::err("Error fetching fixture (id={fixture_id}): {err}") }
 
     // fixture info
@@ -388,6 +389,8 @@ fn import_season(db: sql::Connection, league_id: Int, season: Int) Void!Str {
 
       COMMIT;"
     ).run(fixture_values) -> err { Result::err("Unable to save fixture {fixture_id}: {err}") }
+
+    io::print("Saved fixture={fixture_id}")
   }
 
   Result::ok(())
@@ -396,7 +399,7 @@ fn import_season(db: sql::Connection, league_id: Int, season: Int) Void!Str {
 
 fn sync_season(db: sql::Connection, league_id: Int, season: Int) {
   // check whether there are any fixtures already in the db
-  let row = try db.query("SELECT count(*) FROM fixtures WHERE league_id = @league_id AND season = @season")
+  let row = try db.query("SELECT count(*) as count FROM fixtures WHERE league_id = @league_id AND season = @season")
   .first(["league_id": league_id, "season": season]) -> err {
     io::print("Unable to get fixture count for league {league_id} season {season}: {err}")
   }
@@ -406,6 +409,7 @@ fn sync_season(db: sql::Connection, league_id: Int, season: Int) {
 
   match count {
     0 => {
+      io::print("Importing season for league={league_id}, season={season}")
       match import_season(db: db, league_id: league_id, season: season) {
         ok => (),
         err => {
