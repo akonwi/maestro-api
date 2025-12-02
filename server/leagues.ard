@@ -19,7 +19,7 @@ fn decode_league(data: Dynamic) League![decode::Error] {
   })
 }
 
-fn get_all(db: sql::Connection) [League]!Str {
+fn get_all(db: sql::Database) [League]!Str {
   let rows = try db.query("SELECT * FROM followed_leagues GROUP BY id").all(["_": ()])
   mut leagues: [League] = []
   for row in rows {
@@ -32,7 +32,7 @@ fn get_all(db: sql::Connection) [League]!Str {
 }
 
 // a Set data struct would be great
-fn get_ignored(db: sql::Connection) [Int:Bool] {
+fn get_ignored(db: sql::Database) [Int:Bool] {
   mut ignored: [Int:Bool] = [:]
   let rows = try db.query("select id from ignored_league").all(["": ()]) -> _ { ignored }
 
@@ -63,7 +63,7 @@ fn decode_follow_request(data: Dynamic) FollowInput![decode::Error] {
   })
 }
 
-fn follow(db: sql::Connection, input: FollowInput) Void!Str {
+fn follow(db: sql::Database, input: FollowInput) Void!Str {
   let values: [Str : sql::Value] = [
     "id": input.id,
     "name": input.name,

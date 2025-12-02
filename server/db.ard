@@ -2,12 +2,12 @@ use ard/env
 use ard/io
 use ard/sql
 
-fn connect() sql::Connection {
+fn connect() sql::Database {
   let db_path = env::get("DB_PATH").or("./db.sqlite")
   sql::open(db_path).expect("Failed connect to database at {db_path}")
 }
 
-fn migrate(db: sql::Connection) {
+fn migrate(db: sql::Database) {
   db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
     .expect("Failed to create leagues table")
   db.exec(

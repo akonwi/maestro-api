@@ -195,7 +195,7 @@ fn decode_stats(entry: Dynamic) FixtureStats![decode::Error] {
   })
 }
 
-fn import_season(db: sql::Connection, league_id: Int, season: Int) Void!Str {
+fn import_season(db: sql::Database, league_id: Int, season: Int) Void!Str {
   // there are no fixtures saved, so fetch and save them
   let req = http::Request{
     method: http::Method::Get,
@@ -397,7 +397,7 @@ fn import_season(db: sql::Connection, league_id: Int, season: Int) Void!Str {
 }
 
 
-fn sync_season(db: sql::Connection, league_id: Int, season: Int) {
+fn sync_season(db: sql::Database, league_id: Int, season: Int) {
   // check whether there are any fixtures already in the db
   let row = try db.query("SELECT count(*) as count FROM fixtures WHERE league_id = @league_id AND season = @season")
   .first(["league_id": league_id, "season": season]) -> err {
@@ -429,7 +429,7 @@ fn sync_season(db: sql::Connection, league_id: Int, season: Int) {
   }
 }
 
-fn sync(db: sql::Connection) {
+fn sync(db: sql::Database) {
   let all_leagues = try leagues::get_all(db) -> err { io::print("Unable to get leagues for fixture sync: {err}") }
   for league in all_leagues {
     match leagues::get_current_season(league.id) {
