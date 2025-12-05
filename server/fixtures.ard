@@ -149,9 +149,14 @@ fn decode_team_stats(entry: Dynamic) TeamStats![decode::Error] {
       }
     })
     let decode_float_value = decode::field("value", fn(data: Dynamic) Float![decode::Error] {
-      let str = try decode::run(data, decode::string)
-      let val = Float::from_str(str.replace(old: "%", new: "")).or(0.0)
-      Result::ok(val)
+      match decode::is_void(data) {
+        true => Result::ok(0.0),
+        false => {
+          let str = try decode::run(data, decode::string)
+          let val = Float::from_str(str.replace(old: "%", new: "")).or(0.0)
+          Result::ok(val)
+        }
+      }
     })
 
     match {

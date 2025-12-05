@@ -8,8 +8,6 @@ fn connect() sql::Database {
 }
 
 fn migrate(db: sql::Database) {
-  db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
-    .expect("Failed to create leagues table")
   db.exec(
     "CREATE TABLE IF NOT EXISTS matches (
       id INTEGER PRIMARY KEY,
@@ -49,13 +47,6 @@ fn migrate(db: sql::Database) {
       raw_data TEXT
     )"
   )
-
-  db.exec(
-    "create table if not exists ignored_league (
-      id INTEGER PRIMARY KEY
-    )"
-  )
-
 
   db.exec("DROP TABLE leagues")
 

@@ -192,6 +192,20 @@ fn main() {
               false => unauthorized()
             }
           },
+          http::Method::Put => {
+            match is_authorized(req.headers.get(X_API_TOKEN)) {
+              true => {
+                let body = try decode::from_json(req.body.or("")) -> internal_error
+                // todo: not all failures are 500
+                let id = try decode::run(body, decode::field("id", decode::int)) -> errs { internal_error(errs.at(0).to_str()) }
+                let hidden = try decode::run(body, decode::field("hidden", decode::bool)) -> errs { internal_error(errs.at(0).to_str()) }
+                try leagues::toggle_hidden(conn, id, hidden) -> internal_error
+
+                http::Response{status: 200, headers: res_headers, body: ""}
+              },
+              false => unauthorized()
+            }
+          },
            _ => not_found
         }
       },

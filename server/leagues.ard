@@ -79,6 +79,13 @@ fn create(db: sql::Database, input: FollowInput) Void!Str {
   db.query("INSERT INTO leagues (id, name, hidden) VALUES (@id, @name, @hidden)").run(values)
 }
 
+fn toggle_hidden(db: sql::Database, id: Int, hidden: Bool) Void!Str {
+  db.query("UPDATE leagues SET hidden = @hidden WHERE id = @id").run([
+    "id": id,
+    "hidden": hidden
+  ])
+}
+
 fn get_current_season(id: Int) Int!Str {
   let req = http::Request{
     method: http::Method::Get,
