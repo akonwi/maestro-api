@@ -7,20 +7,27 @@ use maestro/config
 struct League {
   id: Int,
   name: Str,
+  hidden: Bool,
 }
 
+let decode_id = decode::field("id", decode::int)
+let decode_name = decode::field("name", decode::string)
+let decode_hidden = decode::field("hidden", decode::bool)
+
 fn decode_league(data: Dynamic) League![decode::Error] {
-  let id = try decode::run(data, decode::field("id", decode::int))
-  let name = try decode::run(data, decode::field("name", decode::string))
+  let id = try decode_id(data)
+  let name = try decode_name(data)
+  let hidden = try decode_hidden(data)
 
   Result::ok(League{
     id: id,
     name: name,
+    hidden: hidden,
   })
 }
 
 fn get_all(db: sql::Database) [League]!Str {
-  let rows = try db.query("SELECT * FROM followed_leagues GROUP BY id").all(["_": ()])
+  let rows = try db.query("SELECT * FROM leagues").all([:])
   mut leagues: [League] = []
   for row in rows {
     let league = try decode_league(row) -> errs {
@@ -34,10 +41,10 @@ fn get_all(db: sql::Database) [League]!Str {
 // a Set data struct would be great
 fn get_ignored(db: sql::Database) [Int:Bool] {
   mut ignored: [Int:Bool] = [:]
-  let rows = try db.query("select id from ignored_league").all(["": ()]) -> _ { ignored }
+  let rows = try db.query("SELECT id FROM leagues WHERE hidden = true").all([:]) -> _ { ignored }
 
   for row in rows {
-    match decode::run(row, decode::field("id", decode::int)) {
+    match decode_id(row) {
       ok(id) => ignored.set(id, true),
       err => ()
     }
@@ -45,30 +52,31 @@ fn get_ignored(db: sql::Database) [Int:Bool] {
   ignored
 }
 
-let decode_id = decode::field("id", decode::int)
-let decode_name = decode::field("name", decode::string)
-
 struct FollowInput {
   id: Int,
   name: Str,
+  hidden: Bool
 }
 
 fn decode_follow_request(data: Dynamic) FollowInput![decode::Error] {
   let id = try decode_id(data)
   let name = try decode_name(data)
+  let hidden = try decode_hidden(data)
 
   Result::ok(FollowInput{
     id: id,
     name: name,
+    hidden: hidden,
   })
 }
 
-fn follow(db: sql::Database, input: FollowInput) Void!Str {
+fn create(db: sql::Database, input: FollowInput) Void!Str {
   let values: [Str : sql::Value] = [
     "id": input.id,
     "name": input.name,
+    "hidden": input.hidden
   ]
-  db.query("INSERT INTO followed_leagues (id, name) VALUES (@id, @name)").run(values)
+  db.query("INSERT INTO leagues (id, name, hidden) VALUES (@id, @name, @hidden)").run(values)
 }
 
 fn get_current_season(id: Int) Int!Str {

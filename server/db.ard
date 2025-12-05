@@ -56,13 +56,17 @@ fn migrate(db: sql::Database) {
     )"
   )
 
+
+  db.exec("DROP TABLE leagues")
+
   db.exec(
-    "CREATE TABLE IF NOT EXISTS followed_leagues (
+    "CREATE TABLE IF NOT EXISTS leagues (
       id INTEGER PRIMARY KEY,
-      name TEXT NOT NULL
+      name TEXT NOT NULL,
+      hidden BOOLEAN DEFAULT FALSE
     );
     "
-  ).expect("Failed to create followed_leagues table")
+  ).expect("Failed to create leagues table")
 
   db.exec(
     "CREATE TABLE IF NOT EXISTS fixtures (
@@ -72,11 +76,11 @@ fn migrate(db: sql::Database) {
       home_id INTEGER,
       away_id INTEGER,
       timestamp INTEGER,
-      finished BOOL,
+      finished BOOLEAN,
       home_goals INTEGER,
       away_goals INTEGER,
-      FOREIGN KEY (league_id) REFERENCES followed_leagues(id)
-    )"
+      FOREIGN KEY (league_id) REFERENCES leagues(id) ON DELETE CASCADE
+      )"
   ).expect("Failed to create fixtures table")
 
   db.exec("CREATE INDEX IF NOT EXISTS idx_fixtures_league_season ON fixtures(league_id, season)")
@@ -110,15 +114,17 @@ fn migrate(db: sql::Database) {
       xg REAL,
       goals_prevented INTEGER,
       PRIMARY KEY (fixture_id, team_id),
-      FOREIGN KEY (fixture_id) REFERENCES fixtures(id),
-      FOREIGN KEY (league_id) REFERENCES followed_leagues(id)
-    )"
+      FOREIGN KEY (fixture_id) REFERENCES fixtures(id) ON DELETE CASCADE,
+      FOREIGN KEY (league_id) REFERENCES leagues(id) ON DELETE CASCADE
+      )"
   ).expect("Failed to create fixture_stats table")
 
   db.exec("CREATE INDEX IF NOT EXISTS idx_fixture_stats_team_league_season ON fixture_stats(team_id, league_id, season)")
     .expect("Failed to create idx_fixture_stats_team_league_season")
   db.exec("CREATE INDEX IF NOT EXISTS idx_fixture_stats_league_season ON fixture_stats(league_id, season)")
     .expect("Failed to create idx_fixture_stats_league_season")
+
+  db.exec("DROP TABLE ignored_league")
 
   io::print("migrations completed")
 }
