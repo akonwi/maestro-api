@@ -6,7 +6,7 @@ use ard/maybe
 use ard/sql
 
 use maestro/db as _db
-use maestro/matches
+use maestro/fixtures
 
 enum Outcome {
   pending,
@@ -297,10 +297,10 @@ fn resolve_team_cleansheet(db: sql::Database, bet: Bet, opp_goals: Int) Void!Str
   db.query("UPDATE bets SET result = @outcome where id = @id").run(values)
 }
 
-fn resolve_money_line(db: sql::Database, bet: Bet, fixture: matches::Match) Void!Str {
+fn resolve_money_line(db: sql::Database, bet: Bet, fixture: fixtures::Fixture) Void!Str {
   let outcome = match {
-    bet.name.contains("Home") and fixture.home_goals > fixture.away_goals => Outcome::win,
-    bet.name.contains("Away") and fixture.away_goals > fixture.home_goals => Outcome::win,
+    bet.name.contains("Home") and fixture.is_home_win() => Outcome::win,
+    bet.name.contains("Away") and fixture.is_away_win() => Outcome::win,
     _ => Outcome::lose
   }
   let values: [Str:sql::Value] = ["id": bet.id, "outcome": outcome.to_str()]
@@ -308,8 +308,8 @@ fn resolve_money_line(db: sql::Database, bet: Bet, fixture: matches::Match) Void
 }
 
 fn process_bet(db: sql::Database, bet: Bet) Void!Str {
-  let fixture = try matches::get(bet.match_id)
-  if fixture.status == "FT" {
+  let fixture = try (try fixtures::get(db, bet.match_id)) -> _ { Result::err("Fixture {bet.match_id} not found for bet {bet.id}") }
+  if fixture.finished {
     match bet.type_id {
       -1 => (),
       1 => resolve_money_line(db, bet, fixture),

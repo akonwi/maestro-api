@@ -3,6 +3,7 @@ use ard/decode
 use ard/duration
 use ard/http
 use ard/io
+use ard/maybe
 use ard/sql
 
 use maestro/config
@@ -13,7 +14,14 @@ fn dynamic(data: Dynamic) Dynamic![decode::Error] {
   Result::ok(data)
 }
 
-let decode_id = decode::field("id", decode::int)
+// todo: put this in ard/decode
+fn collapse_errors(prefix: Str, errors: [decode::Error]) Str {
+  mut msg = prefix
+  for e in errors {
+    msg = "{msg}: {e}"
+  }
+  msg
+}
 
 struct Fixture {
   id: Int,
@@ -25,6 +33,60 @@ struct Fixture {
   away_id: Int,
   home_goals: Int,
   away_goals: Int,
+}
+
+impl Fixture {
+  fn is_home_win() Bool {
+    @home_goals > @away_goals
+  }
+
+  fn is_away_win() Bool {
+    @home_goals < @away_goals
+  }
+}
+
+let decode_id = decode::field("id", decode::int)
+let decode_league_id = decode::field("league_id", decode::int)
+let decode_season = decode::field("season", decode::int)
+let decode_timestamp = decode::field("timestamp", decode::int)
+let decode_finished = decode::field("finished", decode::bool)
+let decode_home_id = decode::field("home_id", decode::int)
+let decode_away_id = decode::field("away_id", decode::int)
+let decode_home_goals = decode::field("home_goals", decode::int)
+let decode_away_goals = decode::field("away_goals", decode::int)
+
+fn from_row(row: Dynamic) Fixture![decode::Error] {
+  let id = try decode_id(row)
+  let league_id = try decode_league_id(row)
+  let season = try decode_season(row)
+  let timestamp = try decode_timestamp(row)
+  let finished = try decode_finished(row)
+  let home_id = try decode_home_id(row)
+  let away_id = try decode_away_id(row)
+  let home_goals = try decode_home_goals(row)
+  let away_goals = try decode_away_goals(row)
+
+  Result::ok(Fixture {
+    id: id,
+    league_id: league_id,
+    season: season,
+    timestamp: timestamp,
+    finished: finished,
+    home_id: home_id,
+    away_id: away_id,
+    home_goals: home_goals,
+    away_goals: away_goals,
+  })
+}
+
+fn get(db: sql::Database, id: Int) Fixture?!Str {
+  let result = try db.query("SELECT * FROM fixtures WHERE id = @id").first(["id":id])
+  let row = try result -> _ { Result::ok(maybe::none()) }
+
+  match from_row(row) {
+    ok(fixture) => Result::ok(maybe::some(fixture)),
+    err(errs) =>  Result::err(collapse_errors("Failed to decode fixture row", errs))
+  }
 }
 
 let finished_statuses = ["FT", "AET", "PEN", "WO", "AWD"]
@@ -42,14 +104,6 @@ fn decode_is_finished(data: Dynamic) Bool![decode::Error] {
   }
 
   Result::ok(is_finished)
-}
-
-fn collapse_errors(prefix: Str, errors: [decode::Error]) Str {
-  mut msg = prefix
-  for e in errors {
-    msg = "{msg}: {e}"
-  }
-  msg
 }
 
 fn print_errors(errors: [decode::Error]) {
