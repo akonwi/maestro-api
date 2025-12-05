@@ -52,6 +52,16 @@ fn get_ignored(db: sql::Database) [Int:Bool] {
   ignored
 }
 
+fn get_active(db: sql::Database) [League]!Str {
+  let rows = try db.query("SELECT * FROM leagues WHERE hidden = false").all([:])
+  mut leagues = List::new<League>()
+  for row in rows {
+    let l = try decode_league(row) -> errs { Result::err("Unable to decode league row: {errs.at(0)}")  }
+    leagues.push(l)
+  }
+  Result::ok(leagues)
+}
+
 struct FollowInput {
   id: Int,
   name: Str,

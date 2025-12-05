@@ -1,4 +1,6 @@
+use ard/async
 use ard/decode
+use ard/duration
 use ard/http
 use ard/io
 use ard/sql
@@ -538,11 +540,13 @@ match count {
 }
 
 fn sync(db: sql::Database) {
-let all_leagues = try leagues::get_all(db) -> err { io::print("Unable to get leagues for fixture sync: {err}") }
-for league in all_leagues {
-  match leagues::get_current_season(league.id) {
-    ok(season) => sync_season(db: db, league_id: league.id, season: season),
-    err => io::print("Unable to get current season for league {league.id}: {err}")
+  let all_leagues = try leagues::get_active(db) -> err { io::print("Unable to get followed leagues for fixture sync: {err}") }
+  for league in all_leagues {
+    match leagues::get_current_season(league.id) {
+      ok(season) => sync_season(db: db, league_id: league.id, season: season),
+      err => io::print("Unable to get current season for league {league.id}: {err}")
+    }
   }
-}
+
+  async::sleep(duration::from_hours(12))
 }
