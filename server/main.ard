@@ -7,6 +7,7 @@ use ard/json
 use maestro/bets
 use maestro/config
 use maestro/db
+use maestro/fixtures
 use maestro/leagues
 use maestro/matches
 use maestro/predictions
@@ -50,7 +51,7 @@ let not_found = http::Response{status:404, body:"Not found", headers:nf_headers}
 
 fn main() {
   let conn = db::connect()
-  db::init(conn)
+  db::migrate(conn)
 
   let secret = config::api_key()
   fn is_authorized(header: Str?) Bool {
@@ -63,6 +64,7 @@ fn main() {
   // start fiber for updating db regularly
   async::start(predictions::find_juice_worker)
   async::start(bets::update_outcomes)
+  async::start(fn() { fixtures::sync(conn) })
 
   let port = config::port()
   io::print("starting on port {port}")
@@ -170,10 +172,38 @@ fn main() {
           http::Method::Get => {
             let data = try leagues::get_all(conn) -> internal_error
 
-            struct Res { leagues: [leagues::League] }
-            match json::encode(Res{ leagues:data }) {
+            struct Body { leagues: [leagues::League] }
+            match json::encode(Body{ leagues: data }) {
               ok(body) => http::Response{status:200, body:body, headers:res_headers},
               err => internal_error(err)
+            }
+          },
+          http::Method::Options => empty_200(),
+          http::Method::Post => {
+            match is_authorized(req.headers.get(X_API_TOKEN)) {
+              true => {
+                let body = try decode::from_json(req.body.or("")) -> internal_error
+                // todo: not all failures are 500
+                let input = try leagues::decode_follow_request(body) -> errs { internal_error(errs.at(0).to_str()) }
+                try leagues::create(conn, input) -> internal_error
+
+                http::Response{status: 200, headers: res_headers, body: ""}
+              },
+              false => unauthorized()
+            }
+          },
+          http::Method::Put => {
+            match is_authorized(req.headers.get(X_API_TOKEN)) {
+              true => {
+                let body = try decode::from_json(req.body.or("")) -> internal_error
+                // todo: not all failures are 500
+                let id = try decode::run(body, decode::field("id", decode::int)) -> errs { internal_error(errs.at(0).to_str()) }
+                let hidden = try decode::run(body, decode::field("hidden", decode::bool)) -> errs { internal_error(errs.at(0).to_str()) }
+                try leagues::toggle_hidden(conn, id, hidden) -> internal_error
+
+                http::Response{status: 200, headers: res_headers, body: ""}
+              },
+              false => unauthorized()
             }
           },
            _ => not_found
@@ -236,20 +266,6 @@ fn main() {
                 }
               }
             }
-          },
-          _ => not_found
-        }
-      },
-
-      "/leagues/:id/hide": fn(req: http::Request) http::Response {
-        match req.method {
-          http::Method::Options => empty_200(),
-          http::Method::Post => {
-            match Int::from_str(req.path_param("id")) {
-              id => conn.query("INSERT INTO ignored_league (id) VALUES (@id)").run(["id": id]),
-              _ => ()
-            }
-            http::Response{status: 200, headers: res_headers, body: "true"}
           },
           _ => not_found
         }

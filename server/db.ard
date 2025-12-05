@@ -2,15 +2,12 @@ use ard/env
 use ard/io
 use ard/sql
 
-fn connect() sql::Connection {
+fn connect() sql::Database {
   let db_path = env::get("DB_PATH").or("./db.sqlite")
   sql::open(db_path).expect("Failed connect to database at {db_path}")
 }
 
-// migrations
-fn init(db: sql::Connection) {
-  db.exec("create table if not exists leagues (id INTEGER PRIMARY KEY, name TEXT, code TEXT)")
-    .expect("Failed to create leagues table")
+fn migrate(db: sql::Database) {
   db.exec(
     "CREATE TABLE IF NOT EXISTS matches (
       id INTEGER PRIMARY KEY,
@@ -51,9 +48,74 @@ fn init(db: sql::Connection) {
     )"
   )
 
+  db.exec("DROP TABLE leagues")
+
   db.exec(
-    "create table if not exists ignored_league (
-      id INTEGER PRIMARY KEY
-    )"
-  )
+    "CREATE TABLE IF NOT EXISTS leagues (
+      id INTEGER PRIMARY KEY,
+      name TEXT NOT NULL,
+      hidden BOOLEAN DEFAULT FALSE
+    );
+    "
+  ).expect("Failed to create leagues table")
+
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS fixtures (
+      id INTEGER PRIMARY KEY,
+      league_id INTEGER,
+      season INTEGER,
+      home_id INTEGER,
+      away_id INTEGER,
+      timestamp INTEGER,
+      finished BOOLEAN,
+      home_goals INTEGER,
+      away_goals INTEGER,
+      FOREIGN KEY (league_id) REFERENCES leagues(id) ON DELETE CASCADE
+      )"
+  ).expect("Failed to create fixtures table")
+
+  db.exec("CREATE INDEX IF NOT EXISTS idx_fixtures_league_season ON fixtures(league_id, season)")
+    .expect("Failed to create idx_fixtures_league_season")
+  db.exec("CREATE INDEX IF NOT EXISTS idx_fixtures_home_team ON fixtures(home_id, league_id, season)")
+    .expect("Failed to create idx_fixtures_home_team")
+  db.exec("CREATE INDEX IF NOT EXISTS idx_fixtures_away_team ON fixtures(away_id, league_id, season)")
+    .expect("Failed to create idx_fixtures_away_team")
+  db.exec("CREATE INDEX IF NOT EXISTS idx_fixtures_finished ON fixtures(finished)")
+    .expect("Failed to create idx_fixtures_finished")
+
+  db.exec(
+    "CREATE TABLE IF NOT EXISTS fixture_stats (
+      fixture_id INTEGER,
+      team_id INTEGER,
+      league_id INTEGER,
+      season INTEGER,
+      shots INTEGER,
+      shots_on_goal INTEGER,
+      shots_blocked INTEGER,
+      shots_in_box INTEGER,
+      shots_out_box INTEGER,
+      possession REAL,
+      passes INTEGER,
+      passes_completed INTEGER,
+      fouls INTEGER,
+      corners INTEGER,
+      offsides INTEGER,
+      yellow_cards INTEGER,
+      red_cards INTEGER,
+      xg REAL,
+      goals_prevented INTEGER,
+      PRIMARY KEY (fixture_id, team_id),
+      FOREIGN KEY (fixture_id) REFERENCES fixtures(id) ON DELETE CASCADE,
+      FOREIGN KEY (league_id) REFERENCES leagues(id) ON DELETE CASCADE
+      )"
+  ).expect("Failed to create fixture_stats table")
+
+  db.exec("CREATE INDEX IF NOT EXISTS idx_fixture_stats_team_league_season ON fixture_stats(team_id, league_id, season)")
+    .expect("Failed to create idx_fixture_stats_team_league_season")
+  db.exec("CREATE INDEX IF NOT EXISTS idx_fixture_stats_league_season ON fixture_stats(league_id, season)")
+    .expect("Failed to create idx_fixture_stats_league_season")
+
+  db.exec("DROP TABLE ignored_league")
+
+  io::print("migrations completed")
 }

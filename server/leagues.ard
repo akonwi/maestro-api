@@ -1,26 +1,33 @@
 use ard/decode
+use ard/http
 use ard/sql
+
+use maestro/config
 
 struct League {
   id: Int,
   name: Str,
-  code: Str,
+  hidden: Bool,
 }
 
+let decode_id = decode::field("id", decode::int)
+let decode_name = decode::field("name", decode::string)
+let decode_hidden = decode::field("hidden", decode::bool)
+
 fn decode_league(data: Dynamic) League![decode::Error] {
-  let id = try decode::run(data, decode::field("id", decode::int))
-  let name = try decode::run(data, decode::field("name", decode::string))
-  let code = try decode::run(data, decode::field("code", decode::string))
+  let id = try decode_id(data)
+  let name = try decode_name(data)
+  let hidden = try decode_hidden(data)
 
   Result::ok(League{
     id: id,
     name: name,
-    code: code,
+    hidden: hidden,
   })
 }
 
-fn get_all(db: sql::Connection) [League]!Str {
-  let rows = try db.query("select * from leagues order by name asc").all(["_": ()])
+fn get_all(db: sql::Database) [League]!Str {
+  let rows = try db.query("SELECT * FROM leagues").all([:])
   mut leagues: [League] = []
   for row in rows {
     let league = try decode_league(row) -> errs {
@@ -31,16 +38,82 @@ fn get_all(db: sql::Connection) [League]!Str {
   Result::ok(leagues)
 }
 
-// a Set would be great
-fn get_ignored(db: sql::Connection) [Int:Bool] {
+// a Set data struct would be great
+fn get_ignored(db: sql::Database) [Int:Bool] {
   mut ignored: [Int:Bool] = [:]
-  let rows = try db.query("select id from ignored_league").all(["": ()]) -> _ { ignored }
+  let rows = try db.query("SELECT id FROM leagues WHERE hidden = true").all([:]) -> _ { ignored }
 
   for row in rows {
-    match decode::run(row, decode::field("id", decode::int)) {
+    match decode_id(row) {
       ok(id) => ignored.set(id, true),
       err => ()
     }
   }
   ignored
+}
+
+fn get_active(db: sql::Database) [League]!Str {
+  let rows = try db.query("SELECT * FROM leagues WHERE hidden = false").all([:])
+  mut leagues = List::new<League>()
+  for row in rows {
+    let l = try decode_league(row) -> errs { Result::err("Unable to decode league row: {errs.at(0)}")  }
+    leagues.push(l)
+  }
+  Result::ok(leagues)
+}
+
+struct FollowInput {
+  id: Int,
+  name: Str,
+  hidden: Bool
+}
+
+fn decode_follow_request(data: Dynamic) FollowInput![decode::Error] {
+  let id = try decode_id(data)
+  let name = try decode_name(data)
+  let hidden = try decode_hidden(data)
+
+  Result::ok(FollowInput{
+    id: id,
+    name: name,
+    hidden: hidden,
+  })
+}
+
+fn create(db: sql::Database, input: FollowInput) Void!Str {
+  let values: [Str : sql::Value] = [
+    "id": input.id,
+    "name": input.name,
+    "hidden": input.hidden
+  ]
+  db.query("INSERT INTO leagues (id, name, hidden) VALUES (@id, @name, @hidden)").run(values)
+}
+
+fn toggle_hidden(db: sql::Database, id: Int, hidden: Bool) Void!Str {
+  db.query("UPDATE leagues SET hidden = @hidden WHERE id = @id").run([
+    "id": id,
+    "hidden": hidden
+  ])
+}
+
+fn get_current_season(id: Int) Int!Str {
+  let req = http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/leagues?id={id}&current=true",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+      "Accept": "application/json",
+    ],
+  }
+
+  let res = try http::send(req) -> err { Result::err("Error fetching fixtures: {err}") }
+  let body = try decode::from_json(res.body) -> found { Result::err("Unable to parse response body as JSON. Found {found}") }
+
+  let dig_out_season = decode::field("response", decode::at(0, decode::field("seasons", decode::at(0, decode::field("year", decode::int)))))
+
+  let season = try decode::run(body, dig_out_season) -> errs {
+    Result::err(errs.at(0).to_str())
+  }
+
+  Result::ok(season)
 }
