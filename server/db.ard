@@ -9,20 +9,6 @@ fn connect() sql::Database {
 
 fn migrate(db: sql::Database) {
   db.exec(
-    "CREATE TABLE IF NOT EXISTS matches (
-      id INTEGER PRIMARY KEY,
-      date TEXT NOT NULL,
-      timestamp INTEGER NOT NULL,
-      league_id INTEGER NOT NULL,
-      status TEXT NOT NULL,
-      home_team_id INTEGER NOT NULL,
-      away_team_id INTEGER NOT NULL,
-      home_goals INTEGER NOT NULL,
-      away_goals INTEGER NOT NULL,
-      winner_id INTEGER
-    )"
-  ).expect("Failed to create matches table")
-  db.exec(
     "create table if not exists bets (
       id INTEGER PRIMARY KEY,
       match_id INTEGER,
@@ -34,21 +20,11 @@ fn migrate(db: sql::Database) {
     )"
   ).expect("Failed to create bets table")
   db.exec(
-    "create table if not exists teams (
-      id INTEGER PRIMARY KEY,
-      name TEXT NOT NULL,
-      code TEXT,
-      league_id INTEGER NOT NULL
-    )"
-  ).expect("Failed to create teams table")
-  db.exec(
     "create table if not exists juice (
       id TEXT PRIMARY KEY,
       raw_data TEXT
     )"
   )
-
-  db.exec("DROP TABLE leagues")
 
   db.exec(
     "CREATE TABLE IF NOT EXISTS leagues (
@@ -115,7 +91,11 @@ fn migrate(db: sql::Database) {
   db.exec("CREATE INDEX IF NOT EXISTS idx_fixture_stats_league_season ON fixture_stats(league_id, season)")
     .expect("Failed to create idx_fixture_stats_league_season")
 
-  db.exec("DROP TABLE ignored_league")
+  db.exec("
+    DROP TABLE ignored_league;
+    DROP TABLE matches;
+    DROP TABLE teams;
+  ")
 
   io::print("migrations completed")
 }
