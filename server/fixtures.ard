@@ -4,7 +4,6 @@ use ard/decode
 use ard/duration
 use ard/http
 use ard/io
-use ard/maybe
 use ard/sql
 
 use maestro/config
@@ -80,13 +79,13 @@ fn from_row(row: Dynamic) Fixture![decode::Error] {
   })
 }
 
-fn get(db: sql::Database, id: Int) Fixture?!Str {
+fn get(db: sql::Database, id: Int) Fixture!Str {
   let result = try db.query("SELECT * FROM fixtures WHERE id = @id").first(["id":id])
-  let row = try result -> _ { Result::ok(maybe::none()) }
+  let row = try result -> _ { Result::err("No fixture for {id}") }
 
   match from_row(row) {
-    ok(fixture) => Result::ok(maybe::some(fixture)),
-    err(errs) =>  Result::err(collapse_errors("Failed to decode fixture row", errs))
+    ok(fixture) => Result::ok(fixture),
+    err(errs) =>  Result::err(collapse_errors("Failed to decode fixture ({id}) row", errs))
   }
 }
 
@@ -389,8 +388,6 @@ fn import_season(db: sql::Database, league_id: Int, season: Int) Void!Str {
   ")
 
   for f in fixture_stats {
-    io::print("Saving fixture {f.fixture.id}...")
-
     try insert_fixture.run([
       "id": f.fixture.id,
       "league_id": f.fixture.league_id,
@@ -403,7 +400,6 @@ fn import_season(db: sql::Database, league_id: Int, season: Int) Void!Str {
       "away_goals": f.fixture.away_goals,
     ])
     // home stats
-    io::print("\tinserting home stats")
     try insert_stats.run([
       "id": f.fixture.id,
       "team_id": f.fixture.home_id,
@@ -426,7 +422,6 @@ fn import_season(db: sql::Database, league_id: Int, season: Int) Void!Str {
       "goals_prevented": f.home.goals_prevented,
     ])
     // away stats
-    io::print("\tinserting away stats")
     try insert_stats.run([
       "id": f.fixture.id,
       "team_id": f.fixture.away_id,
@@ -448,8 +443,6 @@ fn import_season(db: sql::Database, league_id: Int, season: Int) Void!Str {
       "xg": f.away.xg,
       "goals_prevented": f.away.goals_prevented,
     ])
-
-    io::print("\tSaved")
   }
 
   try tx.commit() -> _ { Result::err("Unable to commit transaction") }
@@ -501,7 +494,6 @@ fn sync_fixtures(db: sql::Database, league_id: Int, season: Int) Void!Str  {
       WHERE fixture_id = @id AND team_id = @team_id
     ")
 
-    io::print("Updating fixture {f.fixture.id}...")
     try update_fixture.run([
       "id": f.fixture.id,
       "home_id": f.fixture.home_id,
@@ -513,7 +505,6 @@ fn sync_fixtures(db: sql::Database, league_id: Int, season: Int) Void!Str  {
     ])
 
     // home stats
-    io::print("\tupdating home stats")
     try update_stats.run([
       "id": f.fixture.id,
       "team_id": f.fixture.home_id,
@@ -534,7 +525,6 @@ fn sync_fixtures(db: sql::Database, league_id: Int, season: Int) Void!Str  {
       "goals_prevented": f.home.goals_prevented,
     ])
     // away stats
-    io::print("\tupdating away stats")
     try update_stats.run([
       "id": f.fixture.id,
       "team_id": f.fixture.away_id,
@@ -556,7 +546,7 @@ fn sync_fixtures(db: sql::Database, league_id: Int, season: Int) Void!Str  {
     ])
 
     match tx.commit() {
-      ok => io::print("\tUpdated"),
+      ok => (),
       err => io::print("\tFailed to save: {err}")
     }
   }

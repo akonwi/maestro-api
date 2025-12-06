@@ -308,7 +308,7 @@ fn resolve_money_line(db: sql::Database, bet: Bet, fixture: fixtures::Fixture) V
 }
 
 fn process_bet(db: sql::Database, bet: Bet) Void!Str {
-  let fixture = try (try fixtures::get(db, bet.match_id)) -> _ { Result::err("Fixture {bet.match_id} not found for bet {bet.id}") }
+  let fixture = try fixtures::get(db, bet.match_id)
   if fixture.finished {
     match bet.type_id {
       -1 => (),
