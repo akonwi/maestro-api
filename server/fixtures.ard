@@ -1,4 +1,5 @@
 use ard/async
+use ard/dates
 use ard/decode
 use ard/duration
 use ard/http
@@ -603,4 +604,112 @@ fn sync(db: sql::Database) {
   }
 
   async::sleep(duration::from_hours(12))
+}
+
+/// Everything below is strictly for data coming directly from API Football
+
+struct ApiTeam {
+  id: Int,
+  name: Str,
+  logo: Str?
+}
+
+fn decode_team(data: Dynamic) ApiTeam![decode::Error] {
+  let id = try decode::run(data, decode::field("id", decode::int))
+  let name = try decode::run(data, decode::field("name", decode::string))
+  let logo = try decode::run(data, decode::field("logo", decode::nullable(decode::string)))
+
+  Result::ok(ApiTeam{
+    id: id,
+    name: name,
+    logo: logo,
+  })
+}
+
+struct ApiLeague {
+  id: Int,
+  name: Str,
+  season: Int,
+}
+
+fn decode_league(data: Dynamic) ApiLeague![decode::Error] {
+  let id = try decode::run(data, decode::field("id", decode::int))
+  let name = try decode::run(data, decode::field("name", decode::string))
+  let season = try decode::run(data, decode::field("season", decode::int))
+
+  Result::ok(ApiLeague{
+    id: id,
+    name: name,
+    season: season,
+  })
+}
+
+struct ApiFixture {
+  id: Int,
+  date: Str,
+  timestamp: Int,
+  league: ApiLeague,
+  status: Str,
+  home: ApiTeam,
+  away: ApiTeam,
+  home_goals: Int,
+  away_goals: Int,
+}
+
+fn decode_fixture_entry(data: Dynamic) ApiFixture![decode::Error] {
+  let id = try decode::run(data, decode::path(["fixture", "id"], decode::int))
+  let date = try decode::run(data, decode::path(["fixture", "date"], decode::string))
+  let timestamp = try decode::run(data, decode::path(["fixture", "timestamp"], decode::int))
+  let status = try decode::run(data, decode::path(["fixture", "status", "short"], decode::string))
+  let league = try decode::run(data, decode::field("league", decode_league))
+  let home = try decode::run(data, decode::path(["teams", "home"], decode_team))
+  let away = try decode::run(data, decode::path(["teams", "away"], decode_team))
+  let home_goals = try decode::run(data, decode::path(["goals", "home"], decode::nullable(decode::int)))
+  let away_goals = try decode::run(data, decode::path(["goals", "away"], decode::nullable(decode::int)))
+
+  Result::ok(ApiFixture{
+    id: id,
+    date: date,
+    timestamp: timestamp,
+    league: league,
+    status: status,
+    home: home,
+    away: away,
+    home_goals: home_goals.or(0),
+    away_goals: away_goals.or(0),
+  })
+}
+
+
+// retrieves all fixtures happening today from API-Football
+fn find_today() [ApiFixture] {
+  let today = dates::get_today()
+  let req = http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/fixtures?status=NS&timezone=America/New_York&date={today}",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+      "Accept": "application/json",
+    ],
+  }
+
+
+  mut fixtures: [ApiFixture] = []
+
+  let res = try http::send(req) -> err {
+    io::print("Error fetching today's fixtures: {err}")
+    fixtures
+  }
+
+  match decode::from_json(res.body) {
+    ok(body) => {
+      try decode::run(body, decode::field("response", decode::list(decode_fixture_entry))) -> errs {
+        io::print("Error decoding body.response: {errs.at(0)}")
+        fixtures
+      }
+    },
+    err => io::print("Invalid JSON returned for today's fixtures: {err}")
+  }
+
+  fixtures
 }

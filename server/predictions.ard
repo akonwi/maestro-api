@@ -11,8 +11,8 @@ use ard/sql
 
 use maestro/config
 use maestro/db as _db
+use maestro/fixtures
 use maestro/leagues
-use maestro/matches
 use maestro/odds
 
 let decode_id = decode::field("id", decode::int)
@@ -159,7 +159,7 @@ fn get_comparison(fixture_id: Int) Comparison!Str {
 }
 
 struct FixturePicks {
-  fixture: matches::Match,
+  fixture: fixtures::ApiFixture,
   stats: [odds::Stat]
 }
 
@@ -259,7 +259,7 @@ private fn find_juice() {
   let ignored_leagues = leagues::get_ignored(db)
 
   mut entries: [FixturePicks] = []
-  for fixture in matches::find_today() {
+  for fixture in fixtures::find_today() {
     if not ignored_leagues.has(fixture.league.id) {
       match get_comparison(fixture.id) {
         ok(comp) => {
