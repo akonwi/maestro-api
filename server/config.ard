@@ -9,3 +9,7 @@ fn port() Int {
   let env_port = env::get("PORT").expect("Missing PORT environment variable")
   Int::from_str(env_port).expect("Unable to convert PORT environment variable into Int ")
 }
+
+fn is_sync_enabled() Bool {
+  env::get("ENABLE_SYNC").or("true") == "true"
+}
