@@ -680,7 +680,6 @@ fn decode_fixture_entry(data: Dynamic) ApiFixture![decode::Error] {
   })
 }
 
-
 // retrieves all fixtures happening today from API-Football
 fn find_today() [ApiFixture] {
   let today = dates::get_today()
@@ -712,4 +711,11 @@ fn find_today() [ApiFixture] {
   }
 
   fixtures
+}
+
+fn get_api_fixture(id: Int) ApiFixture!Str {
+  let data = try fetch(id)
+  let fixture = try decode_fixture_entry(data) -> errs { Result::err(collapse_errors("Unable to decode fixture", errs)) }
+
+  Result::ok(fixture)
 }
