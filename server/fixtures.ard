@@ -167,10 +167,19 @@ let empty_stats = TeamStats{
   red_cards: 0,
 }
 
+struct Team { id: Int, name: Str }
+
+fn decode_team(entry: Dynamic) Team![decode::Error] {
+  let id = try decode::run(entry, decode::field("id", decode::int))
+  let name = try decode::run(entry, decode::field("name", decode::string))
+  Result::ok(Team{id: id, name: name})
+}
+
 struct FixtureStats {
   fixture: Fixture,
   home: TeamStats,
   away: TeamStats,
+  teams: [Team]
 }
 
 fn decode_team_stats(entry: Dynamic) TeamStats![decode::Error] {
@@ -270,8 +279,8 @@ fn decode_stats(entry: Dynamic) FixtureStats![decode::Error] {
   let league_id = try decode::run(entry, decode::path(["league", "id"], decode::int))
   let season = try decode::run(entry, decode::path(["league", "season"], decode::int))
   let is_finished = try decode::run(entry, decode::path(["fixture", "status", "short"], decode_is_finished))
-  let home_id = try decode::run(entry, decode::path(["teams", "home", "id"], decode::int))
-  let away_id = try decode::run(entry, decode::path(["teams", "away", "id"], decode::int))
+  let home = try decode::run(entry, decode::path(["teams", "home"], decode_team))
+  let away = try decode::run(entry, decode::path(["teams", "away"], decode_team))
   let home_goals = try decode::run(entry, decode::path(["goals", "home"], decode::nullable(decode::int)))
   let away_goals = try decode::run(entry, decode::path(["goals", "away"], decode::nullable(decode::int)))
 
@@ -281,8 +290,8 @@ fn decode_stats(entry: Dynamic) FixtureStats![decode::Error] {
     season: season,
     timestamp: timestamp,
     finished: is_finished,
-    home_id: home_id,
-    away_id: away_id,
+    home_id: home.id,
+    away_id: away.id,
     home_goals: home_goals.or(0),
     away_goals: away_goals.or(0),
   }
@@ -303,7 +312,19 @@ fn decode_stats(entry: Dynamic) FixtureStats![decode::Error] {
     fixture: fixture,
     home: teams_stats.at(0),
     away: teams_stats.at(1),
+    teams: [home, away],
   })
+}
+
+fn save_teams(db: sql::Database, tx: sql::Transaction, teams: [Team]) Void!Str {
+  for team in teams {
+    let row = try db.query("SELECT id FROM teams where id = @id").first(["id": team.id])
+    if row.is_none() {
+      try tx.query("INSERT INTO teams (id, name) VALUES (@id, @name)").run(["id": team.id, "name": team.name])
+    }
+  }
+
+  Result::ok(())
 }
 
 fn import_season(db: sql::Database, league_id: Int, season: Int) Void!Str {
@@ -388,6 +409,7 @@ fn import_season(db: sql::Database, league_id: Int, season: Int) Void!Str {
   ")
 
   for f in fixture_stats {
+    try save_teams(db, tx, f.teams)
     try insert_fixture.run([
       "id": f.fixture.id,
       "league_id": f.fixture.league_id,
@@ -494,6 +516,8 @@ fn sync_fixtures(db: sql::Database, league_id: Int, season: Int) Void!Str  {
       WHERE fixture_id = @id AND team_id = @team_id
     ")
 
+    try save_teams(db, tx, f.teams)
+
     try update_fixture.run([
       "id": f.fixture.id,
       "home_id": f.fixture.home_id,
@@ -555,33 +579,33 @@ fn sync_fixtures(db: sql::Database, league_id: Int, season: Int) Void!Str  {
 }
 
 fn sync_season(db: sql::Database, league_id: Int, season: Int) {
-// check whether there are any fixtures already in the db
-let row = try db.query("SELECT count(*) as count FROM fixtures WHERE league_id = @league_id AND season = @season")
-.first(["league_id": league_id, "season": season]) -> err {
-  io::print("Unable to get fixture count for league {league_id} season {season}: {err}")
-}
-let count = try decode::run(row.expect("foobar"), decode::field("count", decode::int)) -> errs {
-  io::print("Unable to parse fixture count for league: {league_id} season: {season}: {collapse_errors("", errs)}")
-}
-
-match count {
-  0 => {
-    io::print("Importing season for league={league_id}, season={season}")
-    match import_season(db: db, league_id: league_id, season: season) {
-      ok => {
-        io::print("Completed import (league={league_id}, season={season})")
-      },
-      err => {
-        io::print("Failed to import (league_id={league_id}, season={season}): {err}")
-        // todo: indicate sync error on leagues table
-      }
-    }
-  },
-  // else, look for incomplete fixtures and update them
-  _ => {
-    try sync_fixtures(db: db, league_id: league_id, season: season) ->  err { io::print("Failed to sync fixtures: {err}") }
+  // check whether there are any fixtures already in the db
+  let row = try db.query("SELECT count(*) as count FROM fixtures WHERE league_id = @league_id AND season = @season")
+  .first(["league_id": league_id, "season": season]) -> err {
+    io::print("Unable to get fixture count for league {league_id} season {season}: {err}")
   }
-}
+  let count = try decode::run(row.expect("foobar"), decode::field("count", decode::int)) -> errs {
+    io::print("Unable to parse fixture count for league: {league_id} season: {season}: {collapse_errors("", errs)}")
+  }
+
+  match count {
+    0 => {
+      io::print("Importing season for league={league_id}, season={season}")
+      match import_season(db: db, league_id: league_id, season: season) {
+        ok => {
+          io::print("Completed import (league={league_id}, season={season})")
+        },
+        err => {
+          io::print("Failed to import (league_id={league_id}, season={season}): {err}")
+          // todo: indicate sync error on leagues table
+        }
+      }
+    },
+    // else, look for incomplete fixtures and update them
+    _ => {
+      try sync_fixtures(db: db, league_id: league_id, season: season) ->  err { io::print("Failed to sync fixtures: {err}") }
+    }
+  }
 }
 
 fn sync(db: sql::Database) {

@@ -91,11 +91,13 @@ fn migrate(db: sql::Database) {
   db.exec("CREATE INDEX IF NOT EXISTS idx_fixture_stats_league_season ON fixture_stats(league_id, season)")
     .expect("Failed to create idx_fixture_stats_league_season")
 
-  db.exec("
-    DROP TABLE ignored_league;
-    DROP TABLE matches;
-    DROP TABLE teams;
-  ")
+  db.exec("DROP TABLE teams;")
+  db.exec("DROP TABLE matches;")
+
+  db.exec("CREATE TABLE IF NOT EXISTS teams (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL
+  );")
 
   io::print("migrations completed")
 }
