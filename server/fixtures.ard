@@ -682,25 +682,23 @@ fn find_today() [ApiFixture] {
     ],
   }
 
-
-  mut fixtures: [ApiFixture] = []
-
   let res = try http::send(req) -> err {
     io::print("Error fetching today's fixtures: {err}")
-    fixtures
+    List::new<ApiFixture>()
   }
 
   match decode::from_json(res.body) {
     ok(body) => {
       try decode::run(body, decode::field("response", decode::list(decode_fixture_entry))) -> errs {
         io::print("Error decoding body.response: {errs.at(0)}")
-        fixtures
+        List::new<ApiFixture>()
       }
     },
-    err => io::print("Invalid JSON returned for today's fixtures: {err}")
+    err => {
+      io::print("Invalid JSON returned for today's fixtures: {err}")
+      List::new<ApiFixture>()
+    }
   }
-
-  fixtures
 }
 
 fn get_api_fixture(id: Int) ApiFixture!Str {
