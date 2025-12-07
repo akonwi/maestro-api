@@ -111,7 +111,7 @@ fn get_current_season(id: Int) Int!Str {
 
   let dig_out_season = decode::field("response", decode::at(0, decode::field("seasons", decode::at(0, decode::field("year", decode::int)))))
 
-  let season = try decode::run(body, dig_out_season) -> errs {
+  let season = try dig_out_season(body) -> errs {
     Result::err(errs.at(0).to_str())
   }
 
