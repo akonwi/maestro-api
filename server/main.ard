@@ -4,6 +4,7 @@ use ard/io
 use ard/http
 use ard/json
 
+use maestro/analysis
 use maestro/bets
 use maestro/config
 use maestro/db
@@ -255,6 +256,35 @@ fn main() {
                   err => internal_error(err)
                 }
               }
+            }
+          },
+          _ => not_found
+        }
+      },
+
+      "/teams/:id/metrics": fn(req: http::Request) http::Response {
+        match req.method {
+          http::Method::Get => {
+            let team_id = try Int::from_str(req.path_param("id")) -> _ {
+              mut headers = res_headers
+              headers.drop("Content-Type")
+              http::Response{status: 400, body: "Invalid team id", headers: headers}
+            }
+            let league_id = try Int::from_str(req.query_param("league_id")) -> _ {
+              mut headers = res_headers
+              headers.drop("Content-Type")
+              http::Response{status: 400, body: "Invalid league_id parameter", headers: headers}
+            }
+            let season = try Int::from_str(req.query_param("season")) -> _ {
+              mut headers = res_headers
+              headers.drop("Content-Type")
+              http::Response{status: 400, body: "Invalid season parameter", headers: headers}
+            }
+
+            let data = try analysis::get_metrics(db: conn, team_id: team_id, league_id: league_id, season: season) -> internal_error
+            match json::encode(data) {
+              ok(body) => http::Response{status:200, body:body, headers:res_headers},
+              err => internal_error(err)
             }
           },
           _ => not_found

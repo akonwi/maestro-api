@@ -1,0 +1,110 @@
+use ard/decode
+use ard/sql
+
+struct Shots {
+  total: Int
+  per_game: Float,
+  on_target: Int,
+  on_target_per_game: Float,
+  off_target: Int,
+  off_target_per_game: Float,
+  in_box: Int,
+  in_box_per_game: Float,
+  out_box: Int,
+  out_box_per_game: Float,
+  blocked: Int,
+  blocked_per_game: Float,
+}
+
+struct TeamMetrics {
+  shots: Shots
+}
+
+// boilerplate allocation of a new instance
+fn TeamMetrics::new() TeamMetrics {
+  // can't inline struct instances yet
+  let shots = Shots {
+    total: 0,
+    per_game: 0.0,
+    on_target: 0,
+    on_target_per_game: 0.0,
+    off_target: 0,
+    off_target_per_game: 0.0,
+    in_box: 0,
+    in_box_per_game: 0.0,
+    out_box: 0,
+    out_box_per_game: 0.0,
+    blocked: 0,
+    blocked_per_game: 0.0,
+  }
+
+  TeamMetrics{
+    shots: shots,
+  }
+}
+
+struct Metrics {
+  team: TeamMetrics,
+  against: TeamMetrics,
+}
+
+fn get_metrics(db: sql::Database, team_id: Int, league_id: Int, season: Int) Metrics!Str {
+  let fixture_stats = try db.query("SELECT f.*, fs.* FROM fixtures f
+    JOIN fixture_stats fs ON f.id = fs.fixture_id
+    WHERE f.league_id = @league_id AND f.season = @season
+    AND (f.home_id = @team_id OR f.away_id = @team_id)
+    AND f.finished = true"
+  ).all(["team_id": team_id, "season": season, "league_id": league_id])
+
+  mut team = TeamMetrics::new()
+  mut opp = TeamMetrics::new()
+
+  for row in fixture_stats {
+    let t_id = try decode::run(row, decode::field("team_id", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+    let total_shots = try decode::run(row, decode::field("shots", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+    let blocked_shots = try decode::run(row, decode::field("shots_blocked", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+    let shots_on_goal = try decode::run(row, decode::field("shots_on_goal", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+    let missed_shots = total_shots - blocked_shots - shots_on_goal
+
+    match team_id == t_id {
+      true => {
+        team.shots.total =+ total_shots
+        team.shots.blocked =+ blocked_shots
+        team.shots.on_target =+ shots_on_goal
+        team.shots.off_target =+ missed_shots
+        team.shots.in_box = try decode::run(row, decode::field("shots_in_box", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+        team.shots.out_box = try decode::run(row, decode::field("shots_out_box", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+      },
+      false => {
+        opp.shots.total =+ total_shots
+        opp.shots.blocked =+ blocked_shots
+        opp.shots.on_target =+ shots_on_goal
+        opp.shots.off_target =+ missed_shots
+        opp.shots.in_box = try decode::run(row, decode::field("shots_in_box", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+        opp.shots.out_box = try decode::run(row, decode::field("shots_out_box", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+      }
+    }
+  }
+
+  // half because there are 2 rows per fixture (1 for each team)
+  let num_games = Float::from_int(fixture_stats.size() / 2)
+
+  team.shots.per_game = Float::from_int(team.shots.total) / num_games
+  team.shots.on_target_per_game = Float::from_int(team.shots.on_target) / num_games
+  team.shots.off_target_per_game = Float::from_int(team.shots.off_target) / num_games
+  team.shots.in_box_per_game = Float::from_int(team.shots.in_box) / num_games
+  team.shots.out_box_per_game = Float::from_int(team.shots.out_box) / num_games
+  team.shots.blocked_per_game = Float::from_int(team.shots.blocked) / num_games
+
+  opp.shots.per_game = Float::from_int(opp.shots.total) / num_games
+  opp.shots.on_target_per_game = Float::from_int(opp.shots.on_target) / num_games
+  opp.shots.off_target_per_game = Float::from_int(opp.shots.off_target) / num_games
+  opp.shots.in_box_per_game = Float::from_int(opp.shots.in_box) / num_games
+  opp.shots.out_box_per_game = Float::from_int(opp.shots.out_box) / num_games
+  opp.shots.blocked_per_game = Float::from_int(opp.shots.blocked) / num_games
+
+  Result::ok(Metrics{
+    team: team,
+    against: opp,
+  })
+}
