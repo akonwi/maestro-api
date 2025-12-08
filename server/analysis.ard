@@ -72,16 +72,16 @@ fn get_metrics(db: sql::Database, team_id: Int, league_id: Int, season: Int) Met
         team.shots.blocked =+ blocked_shots
         team.shots.on_target =+ shots_on_goal
         team.shots.off_target =+ missed_shots
-        team.shots.in_box = try decode::run(row, decode::field("shots_in_box", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
-        team.shots.out_box = try decode::run(row, decode::field("shots_out_box", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+        team.shots.in_box =+ try decode::run(row, decode::field("shots_in_box", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+        team.shots.out_box =+ try decode::run(row, decode::field("shots_out_box", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
       },
       false => {
         opp.shots.total =+ total_shots
         opp.shots.blocked =+ blocked_shots
         opp.shots.on_target =+ shots_on_goal
         opp.shots.off_target =+ missed_shots
-        opp.shots.in_box = try decode::run(row, decode::field("shots_in_box", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
-        opp.shots.out_box = try decode::run(row, decode::field("shots_out_box", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+        opp.shots.in_box =+ try decode::run(row, decode::field("shots_in_box", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+        opp.shots.out_box =+ try decode::run(row, decode::field("shots_out_box", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
       }
     }
   }
