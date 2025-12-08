@@ -287,6 +287,7 @@ fn main() {
               err => internal_error(err)
             }
           },
+          http::Method::Options => empty_200(),
           _ => not_found
         }
       },
