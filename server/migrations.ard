@@ -1,0 +1,213 @@
+use ard/argv
+use ard/io
+use ard/fs
+use ard/sql
+use ard/decode
+
+struct Migration {
+  name: Str,
+}
+
+fn connect() sql::Database {
+  let db_path = "./db.sqlite"
+  sql::open(db_path).expect("Failed to connect to database")
+}
+
+fn init_migrations_table(db: sql::Database) Void!Str {
+  try db.exec(
+    "CREATE TABLE IF NOT EXISTS migrations (
+      id INTEGER PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      batch INTEGER,
+      applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )")
+  Result::ok(())
+}
+
+fn read_migration_sql(migration_name: Str, direction: Str) Str!Str {
+  let path = "migrations/{migration_name}.{direction}.sql"
+  fs::read(path)
+}
+
+fn check_migration_applied(db: sql::Database, name: Str) Bool!Str {
+  let values: [Str:sql::Value] = ["name": name]
+  let rows = try db.query("SELECT COUNT(*) as count FROM migrations WHERE name = @name").all(values)
+  
+  match rows.size() {
+    0 => Result::ok(false),
+    _ => {
+      let row = rows.at(0)
+      let count = try decode::run(row, decode::field("count", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+      Result::ok(count > 0)
+    }
+  }
+}
+
+fn record_migration(db: sql::Database, name: Str, batch: Int) Void!Str {
+  let values: [Str:sql::Value] = [
+    "name": name,
+    "batch": batch,
+  ]
+  try db.query("INSERT INTO migrations (name, batch) VALUES (@name, @batch)").run(values)
+  Result::ok(())
+}
+
+fn get_all_migrations() [Migration] {
+  // Manually list migrations since directory listing isn't available in stdlib
+  // Add new migrations here in order
+  mut migrations: [Migration] = []
+  migrations.push(Migration{ name: "001_initial_schema" })
+  // migrations.push(Migration{ name: "002_add_new_table" })
+  // migrations.push(Migration{ name: "003_add_column" })
+  migrations
+}
+
+fn get_latest_batch(db: sql::Database) Int!Str {
+  let rows = try db.query("SELECT COALESCE(MAX(batch), 0) as max_batch FROM migrations").all([:])
+  
+  match rows.size() {
+    0 => Result::ok(0),
+    _ => {
+      let row = rows.at(0)
+      let max_batch = try decode::run(row, decode::field("max_batch", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+      Result::ok(max_batch)
+    }
+  }
+}
+
+fn get_last_batch_migrations(db: sql::Database) [Str]!Str {
+  let rows = try db.query(
+    "SELECT name FROM migrations WHERE batch = (SELECT MAX(batch) FROM migrations) ORDER BY id DESC"
+  ).all([:])
+  
+  mut names: [Str] = []
+  for row in rows {
+    let name = try decode::run(row, decode::field("name", decode::string)) -> errs { Result::err(errs.at(0).to_str()) }
+    names.push(name)
+  }
+  
+  Result::ok(names)
+}
+
+fn remove_migration(db: sql::Database, name: Str) Void!Str {
+  let values: [Str:sql::Value] = ["name": name]
+  try db.query("DELETE FROM migrations WHERE name = @name").run(values)
+  Result::ok(())
+}
+
+fn run_up(db: sql::Database) Void!Str {
+  try init_migrations_table(db)
+  
+  let all_migrations = get_all_migrations()
+  
+  mut applied_count = 0
+  for migration in all_migrations {
+    let is_applied = try check_migration_applied(db, migration.name)
+    
+    match is_applied {
+      false => {
+        let sql = try read_migration_sql(migration.name, "up")
+        try db.exec(sql)
+        let batch = try get_latest_batch(db)
+        try record_migration(db, migration.name, batch + 1)
+        io::print("[UP] {migration.name}")
+        applied_count =+ 1
+      },
+      true => {}
+    }
+  }
+  
+  match applied_count {
+    0 => {
+      io::print("No pending migrations")
+    },
+    _ => {
+      io::print("{applied_count} migration(s) applied")
+    }
+  }
+  
+  Result::ok(())
+}
+
+fn run_down(db: sql::Database) Void!Str {
+  try init_migrations_table(db)
+  
+  let batch_migrations = try get_last_batch_migrations(db)
+  
+  match batch_migrations.size() {
+    0 => {
+      io::print("No migrations to rollback")
+    },
+    _ => {
+      for migration_name in batch_migrations {
+        let sql = try read_migration_sql(migration_name, "down")
+        try db.exec(sql)
+        try remove_migration(db, migration_name)
+        io::print("[DOWN] {migration_name}")
+      }
+      io::print("1 batch rolled back")
+    }
+  }
+  
+  Result::ok(())
+}
+
+fn get_applied_migrations(db: sql::Database) [Str]!Str {
+  let rows = try db.query("SELECT name FROM migrations ORDER BY id ASC").all([:])
+  
+  mut names: [Str] = []
+  for row in rows {
+    let name = try decode::run(row, decode::field("name", decode::string)) -> errs { Result::err(errs.at(0).to_str()) }
+    names.push(name)
+  }
+  
+  Result::ok(names)
+}
+
+fn get_status(db: sql::Database) Void!Str {
+  try init_migrations_table(db)
+  
+  let all_migrations = get_all_migrations()
+  let applied = try get_applied_migrations(db)
+  
+  io::print("=== Migration Status ===")
+  for migration in all_migrations {
+    mut found = false
+    for applied_name in applied {
+      if migration.name == applied_name {
+        found = true
+      }
+    }
+    
+    match found {
+      true => {
+        io::print("[APPLIED] {migration.name}")
+      },
+      false => {
+        io::print("[PENDING] {migration.name}")
+      }
+    }
+  }
+  
+  Result::ok(())
+}
+
+fn main() {
+  let args = argv::load()
+  let command = match args.arguments.size() {
+    0 => "status",
+    _ => args.arguments.at(0)
+  }
+  
+  let db = connect()
+  
+  if command == "up" {
+    try run_up(db) -> err { io::print("Error: {err}") }
+  } else if command == "down" {
+    try run_down(db) -> err { io::print("Error: {err}") }
+  } else if command == "status" {
+    try get_status(db) -> err { io::print("Error: {err}") }
+  } else {
+    io::print("Usage: ard run migrations.ard [up|down|status]")
+  }
+}
