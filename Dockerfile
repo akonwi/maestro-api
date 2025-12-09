@@ -28,6 +28,10 @@ WORKDIR /app
 # Copy application files
 COPY . .
 
+# Copy and make entrypoint executable
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
 # Set Zeabur required environment variables
 ENV PORT=8080
 ENV HOST=0.0.0.0
@@ -35,8 +39,5 @@ ENV HOST=0.0.0.0
 # Expose port
 EXPOSE 8080
 
-# Run migrations
-RUN ard run server/migrations.ard up
-
-# Run the application
-CMD ["ard", "run", "server/main.ard"]
+# Run entrypoint which handles migrations and starts the server
+ENTRYPOINT ["/app/entrypoint.sh"]
