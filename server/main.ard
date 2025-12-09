@@ -51,7 +51,6 @@ let not_found = http::Response{status:404, body:"Not found", headers:nf_headers}
 
 fn main() {
   let conn = db::connect()
-  db::migrate(conn)
 
   let secret = config::api_key()
   fn is_authorized(header: Str?) Bool {

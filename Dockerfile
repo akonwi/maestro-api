@@ -35,5 +35,8 @@ ENV HOST=0.0.0.0
 # Expose port
 EXPOSE 8080
 
+# Run migrations
+RUN ard run server/migrations.ard up
+
 # Run the application
 CMD ["ard", "run", "server/main.ard"]
