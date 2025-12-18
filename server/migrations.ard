@@ -58,7 +58,7 @@ fn get_all_migrations() [Migration] {
   // Add new migrations here in order
   mut migrations: [Migration] = []
   migrations.push(Migration{ name: "001_initial_schema" })
-  // migrations.push(Migration{ name: "002_add_new_table" })
+  migrations.push(Migration{ name: "002_add_fixture_team_fks" })
   // migrations.push(Migration{ name: "003_add_column" })
   migrations
 }
