@@ -43,6 +43,26 @@ impl Fixture {
   fn is_away_win() Bool {
     @home_goals < @away_goals
   }
+
+  fn to_dynamic() Dynamic {
+    let winner_id = match {
+      @is_home_win() => Dynamic::from(@home_id),
+      @is_away_win() => Dynamic::from(@away_id),
+      _ => Dynamic::from(())
+    }
+    Dynamic::object([
+      "id": Dynamic::from(@id),
+      "league_id": Dynamic::from(@league_id),
+      "season": Dynamic::from(@season),
+      "timestamp": Dynamic::from(@timestamp),
+      "finished": Dynamic::from(@finished),
+      "home_id": Dynamic::from(@home_id),
+      "away_id": Dynamic::from(@away_id),
+      "home_goals": Dynamic::from(@home_goals),
+      "away_goals": Dynamic::from(@away_goals),
+      "winner_id": winner_id,
+    ])
+  }
 }
 
 let decode_id = decode::field("id", decode::int)
@@ -87,6 +107,28 @@ fn get(db: sql::Database, id: Int) Fixture!Str {
     ok(fixture) => Result::ok(fixture),
     err(errs) =>  Result::err(collapse_errors("Failed to decode fixture ({id}) row", errs))
   }
+}
+
+fn find(db: sql::Database, team_id: Int, league_id: Int, season: Int) [Fixture]!Str {
+  let rows = try db.query(
+    "SELECT * FROM fixtures
+    WHERE (home_id = @team_id OR away_id = @team_id)
+    AND season = @season
+    AND league_id = @league_id
+    ORDER BY timestamp ASC;
+  ").all([
+    "team_id": team_id,
+    "season": season,
+    "league_id": league_id,
+  ])
+
+  mut fixtures: [Fixture] = []
+  for row, idx in rows {
+    let f = try from_row(row) -> errs { Result::err(collapse_errors("Failed to decode fixture ({idx}) row", errs)) }
+    fixtures.push(f)
+  }
+
+  Result::ok(fixtures)
 }
 
 let finished_statuses = ["FT", "AET", "PEN", "WO", "AWD"]
