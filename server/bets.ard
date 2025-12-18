@@ -5,7 +5,6 @@ use ard/io
 use ard/maybe
 use ard/sql
 
-use maestro/db as _db
 use maestro/fixtures
 
 enum Outcome {
@@ -223,7 +222,7 @@ fn get_overview(db: sql::Database) Overview!Str {
 
 fn catch(errs: [decode::Error]) Bet!Str {
   io::print("Error parsing bet input: {errs.at(0)}")
-  Result::err(message: errs.at(0).to_str())
+  Result::err(errs.at(0).to_str())
 }
 
 // todo: use a union for the error type - could be bad inputs or db error
@@ -303,8 +302,10 @@ fn resolve_money_line(db: sql::Database, bet: Bet, fixture: fixtures::Fixture) V
     bet.name.contains("Away") and fixture.is_away_win() => Outcome::win,
     _ => Outcome::lose
   }
-  let values: [Str:sql::Value] = ["id": bet.id, "outcome": outcome.to_str()]
-  db.query("UPDATE bets SET result = @outcome where id = @id").run(values)
+  db.query("UPDATE bets SET result = @outcome where id = @id").run([
+    "id": bet.id,
+    "outcome": outcome.to_str()
+  ])
 }
 
 fn process_bet(db: sql::Database, bet: Bet) Void!Str {
@@ -323,8 +324,7 @@ fn process_bet(db: sql::Database, bet: Bet) Void!Str {
   Result::ok(())
 }
 
-fn update_outcomes() {
-  let db = _db::connect()
+fn update_outcomes(db: sql::Database) {
   while {
     let bets = try find_by_outcome(db, Outcome::pending) -> err {
       io::print("Error finding pending bets to update: {err}")

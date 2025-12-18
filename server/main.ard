@@ -62,7 +62,7 @@ fn main() {
 
   if config::is_sync_enabled() {
     async::start(predictions::find_juice_worker)
-    async::start(bets::update_outcomes)
+    async::start(fn() { bets::update_outcomes(conn) })
     async::start(fn() { fixtures::sync(conn) })
   }
 
