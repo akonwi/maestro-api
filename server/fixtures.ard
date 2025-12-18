@@ -23,14 +23,25 @@ fn collapse_errors(prefix: Str, errors: [decode::Error]) Str {
   msg
 }
 
+struct Team { id: Int, name: Str }
+
+impl Team {
+  fn to_dyn() Dynamic {
+    Dynamic::object([
+      "id": Dynamic::from(@id),
+      "name": Dynamic::from(@name),
+    ])
+  }
+}
+
 struct Fixture {
   id: Int,
   league_id: Int,
   season: Int,
   timestamp: Int,
   finished: Bool,
-  home_id: Int,
-  away_id: Int,
+  home: Team,
+  away: Team,
   home_goals: Int,
   away_goals: Int,
 }
@@ -46,8 +57,8 @@ impl Fixture {
 
   fn to_dynamic() Dynamic {
     let winner_id = match {
-      @is_home_win() => Dynamic::from(@home_id),
-      @is_away_win() => Dynamic::from(@away_id),
+      @is_home_win() => Dynamic::from(@home.id),
+      @is_away_win() => Dynamic::from(@away.id),
       _ => Dynamic::from(())
     }
     Dynamic::object([
@@ -56,8 +67,8 @@ impl Fixture {
       "season": Dynamic::from(@season),
       "timestamp": Dynamic::from(@timestamp),
       "finished": Dynamic::from(@finished),
-      "home_id": Dynamic::from(@home_id),
-      "away_id": Dynamic::from(@away_id),
+      "home": @home.to_dyn(),
+      "away": @away.to_dyn(),
       "home_goals": Dynamic::from(@home_goals),
       "away_goals": Dynamic::from(@away_goals),
       "winner_id": winner_id,
@@ -65,6 +76,7 @@ impl Fixture {
   }
 }
 
+// decoder functions for reading from db
 let decode_id = decode::field("id", decode::int)
 let decode_league_id = decode::field("league_id", decode::int)
 let decode_season = decode::field("season", decode::int)
@@ -74,6 +86,8 @@ let decode_home_id = decode::field("home_id", decode::int)
 let decode_away_id = decode::field("away_id", decode::int)
 let decode_home_goals = decode::field("home_goals", decode::int)
 let decode_away_goals = decode::field("away_goals", decode::int)
+let decode_home_name = decode::field("home_name", decode::string)
+let decode_away_name = decode::field("away_name", decode::string)
 
 fn from_row(row: Dynamic) Fixture![decode::Error] {
   let id = try decode_id(row)
@@ -82,7 +96,11 @@ fn from_row(row: Dynamic) Fixture![decode::Error] {
   let timestamp = try decode_timestamp(row)
   let finished = try decode_finished(row)
   let home_id = try decode_home_id(row)
+  let home_name = try decode_home_name(row)
   let away_id = try decode_away_id(row)
+  let away_name = try decode_away_name(row)
+  let home = Team{id: home_id, name: home_name}
+  let away = Team{id: away_id, name: away_name}
   let home_goals = try decode_home_goals(row)
   let away_goals = try decode_away_goals(row)
 
@@ -92,15 +110,21 @@ fn from_row(row: Dynamic) Fixture![decode::Error] {
     season: season,
     timestamp: timestamp,
     finished: finished,
-    home_id: home_id,
-    away_id: away_id,
+    home: home,
+    away: away,
     home_goals: home_goals,
     away_goals: away_goals,
   })
 }
 
 fn get(db: sql::Database, id: Int) Fixture!Str {
-  let result = try db.query("SELECT * FROM fixtures WHERE id = @id").first(["id":id])
+  let result = try db.query(
+    "SELECT f.*, h.name as home_name, a.name as away_name
+    FROM fixtures f
+    INNER JOIN teams h ON h.id = f.home_id
+    INNER JOIN teams a ON a.id = f.away_id
+    WHERE f.id = @id"
+  ).first(["id":id])
   let row = try result -> _ { Result::err("No fixture for {id}") }
 
   match from_row(row) {
@@ -111,11 +135,14 @@ fn get(db: sql::Database, id: Int) Fixture!Str {
 
 fn find(db: sql::Database, team_id: Int, league_id: Int, season: Int) [Fixture]!Str {
   let rows = try db.query(
-    "SELECT * FROM fixtures
-    WHERE (home_id = @team_id OR away_id = @team_id)
+    "SELECT f.*, h.name as home_name, a.name as away_name
+    FROM fixtures f
+    INNER JOIN teams h ON h.id = f.home_id
+    INNER JOIN teams a ON a.id = f.away_id
+    WHERE (f.home_id = @team_id OR f.away_id = @team_id)
     AND season = @season
     AND league_id = @league_id
-    ORDER BY timestamp ASC;
+    ORDER BY f.timestamp ASC;
   ").all([
     "team_id": team_id,
     "season": season,
@@ -208,8 +235,6 @@ let empty_stats = TeamStats{
   yellow_cards: 0,
   red_cards: 0,
 }
-
-struct Team { id: Int, name: Str }
 
 fn decode_team(entry: Dynamic) Team![decode::Error] {
   let id = try decode::run(entry, decode::field("id", decode::int))
@@ -332,8 +357,8 @@ fn decode_stats(entry: Dynamic) FixtureStats![decode::Error] {
     season: season,
     timestamp: timestamp,
     finished: is_finished,
-    home_id: home.id,
-    away_id: away.id,
+    home: home,
+    away: away,
     home_goals: home_goals.or(0),
     away_goals: away_goals.or(0),
   }
@@ -456,8 +481,8 @@ fn import_season(db: sql::Database, league_id: Int, season: Int) Void!Str {
       "id": f.fixture.id,
       "league_id": f.fixture.league_id,
       "season": f.fixture.season,
-      "home_id": f.fixture.home_id,
-      "away_id": f.fixture.away_id,
+      "home_id": f.fixture.home.id,
+      "away_id": f.fixture.away.id,
       "timestamp": f.fixture.timestamp,
       "finished": f.fixture.finished,
       "home_goals": f.fixture.home_goals,
@@ -466,7 +491,7 @@ fn import_season(db: sql::Database, league_id: Int, season: Int) Void!Str {
     // home stats
     try insert_stats.run([
       "id": f.fixture.id,
-      "team_id": f.fixture.home_id,
+      "team_id": f.fixture.home.id,
       "league_id": f.fixture.league_id,
       "season": f.fixture.season,
       "total_shots": f.home.shots,
@@ -488,7 +513,7 @@ fn import_season(db: sql::Database, league_id: Int, season: Int) Void!Str {
     // away stats
     try insert_stats.run([
       "id": f.fixture.id,
-      "team_id": f.fixture.away_id,
+      "team_id": f.fixture.away.id,
       "league_id": f.fixture.league_id,
       "season": f.fixture.season,
       "total_shots": f.away.shots,
@@ -562,8 +587,8 @@ fn sync_fixtures(db: sql::Database, league_id: Int, season: Int) Void!Str  {
 
     try update_fixture.run([
       "id": f.fixture.id,
-      "home_id": f.fixture.home_id,
-      "away_id": f.fixture.away_id,
+      "home_id": f.fixture.home.id,
+      "away_id": f.fixture.away.id,
       "timestamp": f.fixture.timestamp,
       "finished": f.fixture.finished,
       "home_goals": f.fixture.home_goals,
@@ -573,7 +598,7 @@ fn sync_fixtures(db: sql::Database, league_id: Int, season: Int) Void!Str  {
     // home stats
     try update_stats.run([
       "id": f.fixture.id,
-      "team_id": f.fixture.home_id,
+      "team_id": f.fixture.home.id,
       "total_shots": f.home.shots,
       "shots_on_goal": f.home.shots_on_goal,
       "shots_blocked": f.home.shots_blocked,
@@ -593,7 +618,7 @@ fn sync_fixtures(db: sql::Database, league_id: Int, season: Int) Void!Str  {
     // away stats
     try update_stats.run([
       "id": f.fixture.id,
-      "team_id": f.fixture.away_id,
+      "team_id": f.fixture.away.id,
       "total_shots": f.away.shots,
       "shots_on_goal": f.away.shots_on_goal,
       "shots_blocked": f.away.shots_blocked,
