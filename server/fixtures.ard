@@ -133,7 +133,7 @@ fn get(db: sql::Database, id: Int) Fixture!Str {
   }
 }
 
-fn find(db: sql::Database, team_id: Int, league_id: Int, season: Int) [Fixture]!Str {
+fn find_from_db(db: sql::Database, team_id: Int, league_id: Int, season: Int) [Fixture]!Str {
   let rows = try db.query(
     "SELECT f.*, h.name as home_name, a.name as away_name
     FROM fixtures f
@@ -579,7 +579,7 @@ fn sync_fixtures(db: sql::Database, league_id: Int, season: Int) Void!Str  {
         yellow_cards = @yellow_cards,
         red_cards = @red_cards,
         xg = @xg,
-        goals_prevented == @goals_prevented
+        goals_prevented = @goals_prevented
       WHERE fixture_id = @id AND team_id = @team_id
     ")
 
@@ -695,7 +695,7 @@ struct ApiTeam {
   logo: Str?
 }
 
-fn decode_team(data: Dynamic) ApiTeam![decode::Error] {
+fn decode_api_team(data: Dynamic) ApiTeam![decode::Error] {
   let id = try decode::run(data, decode::field("id", decode::int))
   let name = try decode::run(data, decode::field("name", decode::string))
   let logo = try decode::run(data, decode::field("logo", decode::nullable(decode::string)))
@@ -743,8 +743,8 @@ fn decode_fixture_entry(data: Dynamic) ApiFixture![decode::Error] {
   let timestamp = try decode::run(data, decode::path(["fixture", "timestamp"], decode::int))
   let status = try decode::run(data, decode::path(["fixture", "status", "short"], decode::string))
   let league = try decode::run(data, decode::field("league", decode_league))
-  let home = try decode::run(data, decode::path(["teams", "home"], decode_team))
-  let away = try decode::run(data, decode::path(["teams", "away"], decode_team))
+  let home = try decode::run(data, decode::path(["teams", "home"], decode_api_team))
+  let away = try decode::run(data, decode::path(["teams", "away"], decode_api_team))
   let home_goals = try decode::run(data, decode::path(["goals", "home"], decode::nullable(decode::int)))
   let away_goals = try decode::run(data, decode::path(["goals", "away"], decode::nullable(decode::int)))
 
@@ -797,4 +797,59 @@ fn get_api_fixture(id: Int) ApiFixture!Str {
   let fixture = try decode_fixture_entry(data) -> errs { Result::err(collapse_errors("Unable to decode fixture", errs)) }
 
   Result::ok(fixture)
+}
+
+fn Fixture::from_api_entry(data: Dynamic) Fixture![decode::Error] {
+  let id = try decode::run(data, decode::path(["fixture", "id"], decode::int))
+  let timestamp = try decode::run(data, decode::path(["fixture", "timestamp"], decode::int))
+  let finished = try decode::run(data, decode::path(["fixture", "status", "short"], decode_is_finished))
+  let league = try decode::run(data, decode::field("league", decode_league))
+  let home = try decode::run(data, decode::path(["teams", "home"], decode_team))
+  let away = try decode::run(data, decode::path(["teams", "away"], decode_team))
+  let home_goals = try decode::run(data, decode::path(["goals", "home"], decode::nullable(decode::int)))
+  let away_goals = try decode::run(data, decode::path(["goals", "away"], decode::nullable(decode::int)))
+
+  Result::ok(Fixture{
+    id: id,
+    season: league.season,
+    timestamp: timestamp,
+    league_id: league.id,
+    finished: finished,
+    home: home,
+    away: away,
+    home_goals: home_goals.or(0),
+    away_goals: away_goals.or(0),
+  })
+}
+
+fn find_from_api(db: sql::Database, team_id: Int, league_id: Int, season: Int) [Fixture]!Str {
+  let req = http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/fixtures?team={team_id}&league={league_id}&season={season}",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+      "Accept": "application/json",
+    ],
+  }
+
+  let res = try http::send(req) -> err {
+    Result::err("Error fetching team fixtures (team={team_id}, league={league_id}, season={season}): {err}")
+  }
+  let body = try decode::from_json(res.body) -> found {
+    Result::err("Unable to parse response body as JSON (team={team_id}, league={league_id}, season={season}). Found {found}")
+  }
+  let fixtures = try decode::run(body, decode::field("response", decode::list(Fixture::from_api_entry))) -> errs {
+    let msg = collapse_errors("Error decoding body.response while from fetched fixtures(team={team_id}, league={league_id}, season={season})", errs)
+    Result::err(msg)
+  }
+
+  Result::ok(fixtures)
+}
+
+// main way to get a list of fixtures
+fn find(db: sql::Database, team_id: Int, league_id: Int, season: Int) [Fixture]!Str {
+  match leagues::is_following(db, league_id) {
+    true => find_from_db(db: db, team_id: team_id, league_id: league_id, season: season),
+    false => find_from_api(db: db, team_id: team_id, league_id: league_id, season: season),
+  }
 }

@@ -1,5 +1,6 @@
 use ard/decode
 use ard/http
+use ard/io
 use ard/sql
 
 use maestro/config
@@ -60,6 +61,14 @@ fn get_active(db: sql::Database) [League]!Str {
     leagues.push(l)
   }
   Result::ok(leagues)
+}
+
+fn is_following(db: sql::Database, id: Int) Bool {
+  let row = try db.query("SELECT hidden FROM leagues WHERE id = @id AND hidden = false").first(["id":id]) -> err {
+    io::print("Error finding league ({id}) in database: {err}")
+    false
+  }
+  row.is_some()
 }
 
 struct FollowInput {
