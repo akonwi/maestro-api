@@ -296,16 +296,18 @@ fn resolve_team_cleansheet(db: sql::Database, bet: Bet, opp_goals: Int) Void!Str
   db.query("UPDATE bets SET result = @outcome where id = @id").run(values)
 }
 
-fn resolve_money_line(db: sql::Database, bet: Bet, fixture: fixtures::Fixture) Void!Str {
+fn resolve_money_line(db: sql::Database, bet: Bet, fixture: fixtures::Fixture) {
   let outcome = match {
     bet.name.contains("Home") and fixture.is_home_win() => Outcome::win,
     bet.name.contains("Away") and fixture.is_away_win() => Outcome::win,
     _ => Outcome::lose
   }
-  db.query("UPDATE bets SET result = @outcome where id = @id").run([
+  let res = try db.query("UPDATE bets SET result = @outcome where id = @id").run([
     "id": bet.id,
     "outcome": outcome.to_str()
-  ])
+  ]) -> err {
+    io::print("Error setting bet ({bet.id}) outcome to {outcome}: {err}")
+  }
 }
 
 fn process_bet(db: sql::Database, bet: Bet) Void!Str {
