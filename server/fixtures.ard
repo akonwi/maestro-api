@@ -191,7 +191,9 @@ fn fetch(id: Int) Dynamic!Str {
 
   let res = try http::send(req) -> err { Result::err("Error fetching fixture (id={id}): {err}") }
   let body = try decode::from_json(res.body) -> found { Result::err("Unable to parse response body as JSON (league={id}). Found {found}") }
-  let entry = try decode::run(body, decode::field("response", decode::at(0, dynamic))) -> errs { Result::err(collapse_errors("", errs)) }
+  let entry = try decode::run(body, decode::field("response", decode::at(0, dynamic))) -> errs {
+    Result::err(collapse_errors("Could not decode response[0] in data for fixture({id})", errs))
+  }
   Result::ok(entry)
 }
 
