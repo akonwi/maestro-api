@@ -811,13 +811,6 @@ fn find_today() [ApiFixture] {
   }
 }
 
-fn get_api_fixture(id: Int) ApiFixture!Str {
-  let data = try fetch(id)
-  let fixture = try decode_fixture_entry(data) -> errs { Result::err(collapse_errors("Unable to decode fixture", errs)) }
-
-  Result::ok(fixture)
-}
-
 fn Fixture::from_api_entry(data: Dynamic) Fixture![decode::Error] {
   let id = try decode::run(data, decode::path(["fixture", "id"], decode::int))
   let timestamp = try decode::run(data, decode::path(["fixture", "timestamp"], decode::int))
