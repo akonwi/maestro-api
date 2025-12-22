@@ -848,10 +848,11 @@ fn find_from_api(db: sql::Database, team_id: Int, league_id: Int, season: Int) [
   Result::ok(fixtures)
 }
 
-// main way to get a list of fixtures
+// main way to get a list of fixtures. check in database and fall back to the external API
 fn find(db: sql::Database, team_id: Int, league_id: Int, season: Int) [Fixture]!Str {
-  match leagues::is_following(db, league_id) {
-    true => find_from_db(db: db, team_id: team_id, league_id: league_id, season: season),
-    false => find_from_api(db: db, team_id: team_id, league_id: league_id, season: season),
+  let rows = try find_from_db(db: db, team_id: team_id, league_id: league_id, season: season)
+  match rows.size() {
+    0 => find_from_api(db: db, team_id: team_id, league_id: league_id, season: season),
+    _ => Result::ok(rows)
   }
 }
