@@ -34,9 +34,24 @@ impl Team {
   }
 }
 
+struct League {
+  id: Int,
+  name: Str,
+}
+
+impl League {
+  fn to_dyn() Dynamic {
+    Dynamic::object([
+      "id": Dynamic::from(@id),
+      "name": Dynamic::from(@name),
+    ])
+  }
+}
+
 struct Fixture {
   id: Int,
   league_id: Int,
+  league: League
   season: Int,
   timestamp: Int,
   finished: Bool,
@@ -63,7 +78,7 @@ impl Fixture {
     }
     Dynamic::object([
       "id": Dynamic::from(@id),
-      "league_id": Dynamic::from(@league_id),
+      "league": @league.to_dyn(),
       "season": Dynamic::from(@season),
       "timestamp": Dynamic::from(@timestamp),
       "finished": Dynamic::from(@finished),
@@ -79,6 +94,7 @@ impl Fixture {
 // decoder functions for reading from db
 let decode_id = decode::field("id", decode::int)
 let decode_league_id = decode::field("league_id", decode::int)
+let decode_league_name = decode::field("league_name", decode::string)
 let decode_season = decode::field("season", decode::int)
 let decode_timestamp = decode::field("timestamp", decode::int)
 let decode_finished = decode::field("finished", decode::bool)
@@ -92,6 +108,7 @@ let decode_away_name = decode::field("away_name", decode::string)
 fn from_row(row: Dynamic) Fixture![decode::Error] {
   let id = try decode_id(row)
   let league_id = try decode_league_id(row)
+  let league_name = try decode_league_name(row)
   let season = try decode_season(row)
   let timestamp = try decode_timestamp(row)
   let finished = try decode_finished(row)
@@ -107,6 +124,7 @@ fn from_row(row: Dynamic) Fixture![decode::Error] {
   Result::ok(Fixture {
     id: id,
     league_id: league_id,
+    league: League{id: league_id, name: league_name},
     season: season,
     timestamp: timestamp,
     finished: finished,
@@ -117,26 +135,23 @@ fn from_row(row: Dynamic) Fixture![decode::Error] {
   })
 }
 
-fn get(db: sql::Database, id: Int) Fixture!Str {
-  let result = try db.query(
-    "SELECT f.*, h.name as home_name, a.name as away_name
-    FROM fixtures f
-    INNER JOIN teams h ON h.id = f.home_id
-    INNER JOIN teams a ON a.id = f.away_id
-    WHERE f.id = @id"
-  ).first(["id":id])
-  let row = try result -> _ { Result::err("No fixture for {id}") }
-
-  match from_row(row) {
-    ok(fixture) => Result::ok(fixture),
-    err(errs) =>  Result::err(collapse_errors("Failed to decode fixture ({id}) row", errs))
-  }
-}
-
 fn find_from_db(db: sql::Database, team_id: Int, league_id: Int, season: Int) [Fixture]!Str {
   let rows = try db.query(
-    "SELECT f.*, h.name as home_name, a.name as away_name
+    "SELECT
+      f.id,
+      l.id as league_id,
+      f.season,
+      f.home_id,
+      f.away_id,
+      f.timestamp,
+      f.finished,
+      f.home_goals,
+      f.away_goals,
+      h.name as home_name,
+      a.name as away_name,
+      l.name as league_name
     FROM fixtures f
+    INNER JOIN leagues l ON l.id = f.league_id
     INNER JOIN teams h ON h.id = f.home_id
     INNER JOIN teams a ON a.id = f.away_id
     WHERE (f.home_id = @team_id OR f.away_id = @team_id)
@@ -346,6 +361,7 @@ fn decode_stats(entry: Dynamic) FixtureStats![decode::Error] {
   let id = try decode::run(entry, decode::path(["fixture", "id"], decode::int))
   let timestamp = try decode::run(entry, decode::path(["fixture", "timestamp"], decode::int))
   let league_id = try decode::run(entry, decode::path(["league", "id"], decode::int))
+  let league_name = try decode::run(entry, decode::path(["league", "name"], decode::string))
   let season = try decode::run(entry, decode::path(["league", "season"], decode::int))
   let is_finished = try decode::run(entry, decode::path(["fixture", "status", "short"], decode_is_finished))
   let home = try decode::run(entry, decode::path(["teams", "home"], decode_team))
@@ -356,6 +372,7 @@ fn decode_stats(entry: Dynamic) FixtureStats![decode::Error] {
   let fixture = Fixture{
     id: id,
     league_id: league_id,
+    league: League{id: league_id, name: league_name},
     season: season,
     timestamp: timestamp,
     finished: is_finished,
@@ -816,6 +833,7 @@ fn Fixture::from_api_entry(data: Dynamic) Fixture![decode::Error] {
     season: league.season,
     timestamp: timestamp,
     league_id: league.id,
+    league: League{id: league.id, name: league.name},
     finished: finished,
     home: home,
     away: away,
@@ -854,5 +872,45 @@ fn find(db: sql::Database, team_id: Int, league_id: Int, season: Int) [Fixture]!
   match rows.size() {
     0 => find_from_api(db: db, team_id: team_id, league_id: league_id, season: season),
     _ => Result::ok(rows)
+  }
+}
+
+// try db first and fallback to external API
+fn get(db: sql::Database, id: Int) Fixture!Str {
+  let result = try db.query(
+    "SELECT
+      f.id,
+      l.id as league_id,
+      f.season,
+      f.home_id,
+      f.away_id,
+      f.timestamp,
+      f.finished,
+      f.home_goals,
+      f.away_goals,
+      h.name as home_name,
+      a.name as away_name,
+      l.name as league_name
+    FROM fixtures f
+    INNER JOIN leagues l ON l.id = f.league_id
+    INNER JOIN teams h ON h.id = f.home_id
+    INNER JOIN teams a ON a.id = f.away_id
+    WHERE f.id = @id"
+  ).first(["id":id])
+
+  match result {
+    row => {
+      match from_row(row) {
+        ok(fixture) => Result::ok(fixture),
+        err(errs) => Result::err(collapse_errors("Failed to decode fixture ({id}) row", errs))
+      }
+    },
+    _ => {
+      let data = try fetch(id)
+      let fixture = try Fixture::from_api_entry(data) -> errs {
+        Result::err(collapse_errors("Failed to decode fixture ({id}) entry", errs))
+      }
+      Result::ok(fixture)
+    }
   }
 }

@@ -220,9 +220,9 @@ fn main() {
         match req.method {
           http::Method::Get => {
             let id = try Int::from_str(req.path_param("id")) -> _ { not_found }
-            let fixture = try fixtures::get_api_fixture(id) -> internal_error
+            let fixture = try fixtures::get(conn, id) -> internal_error
 
-            match json::encode(fixture) {
+            match json::encode(fixture.to_dynamic()) {
               ok(body) => http::Response{status:200, body:body, headers:res_headers},
               err => internal_error(err)
             }
