@@ -159,7 +159,7 @@ fn get_comparison(fixture_id: Int) Comparison!Str {
 }
 
 struct FixturePicks {
-  fixture: fixtures::ApiFixture,
+  fixture: fixtures::Fixture,
   stats: [odds::Stat]
 }
 

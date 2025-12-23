@@ -744,73 +744,6 @@ fn decode_league(data: Dynamic) ApiLeague![decode::Error] {
   })
 }
 
-struct ApiFixture {
-  id: Int,
-  date: Str,
-  timestamp: Int,
-  league: ApiLeague,
-  status: Str,
-  home: ApiTeam,
-  away: ApiTeam,
-  home_goals: Int,
-  away_goals: Int,
-}
-
-fn decode_fixture_entry(data: Dynamic) ApiFixture![decode::Error] {
-  let id = try decode::run(data, decode::path(["fixture", "id"], decode::int))
-  let date = try decode::run(data, decode::path(["fixture", "date"], decode::string))
-  let timestamp = try decode::run(data, decode::path(["fixture", "timestamp"], decode::int))
-  let status = try decode::run(data, decode::path(["fixture", "status", "short"], decode::string))
-  let league = try decode::run(data, decode::field("league", decode_league))
-  let home = try decode::run(data, decode::path(["teams", "home"], decode_api_team))
-  let away = try decode::run(data, decode::path(["teams", "away"], decode_api_team))
-  let home_goals = try decode::run(data, decode::path(["goals", "home"], decode::nullable(decode::int)))
-  let away_goals = try decode::run(data, decode::path(["goals", "away"], decode::nullable(decode::int)))
-
-  Result::ok(ApiFixture{
-    id: id,
-    date: date,
-    timestamp: timestamp,
-    league: league,
-    status: status,
-    home: home,
-    away: away,
-    home_goals: home_goals.or(0),
-    away_goals: away_goals.or(0),
-  })
-}
-
-// retrieves all fixtures happening today from API-Football
-fn find_today() [ApiFixture] {
-  let today = dates::get_today()
-  let req = http::Request{
-    method: http::Method::Get,
-    url: "https://v3.football.api-sports.io/fixtures?status=NS&timezone=America/New_York&date={today}",
-    headers: [
-      "x-rapidapi-key": config::api_key(),
-      "Accept": "application/json",
-    ],
-  }
-
-  let res = try http::send(req) -> err {
-    io::print("Error fetching today's fixtures: {err}")
-    List::new<ApiFixture>()
-  }
-
-  match decode::from_json(res.body) {
-    ok(body) => {
-      try decode::run(body, decode::field("response", decode::list(decode_fixture_entry))) -> errs {
-        io::print("Error decoding body.response: {errs.at(0)}")
-        List::new<ApiFixture>()
-      }
-    },
-    err => {
-      io::print("Invalid JSON returned for today's fixtures: {err}")
-      List::new<ApiFixture>()
-    }
-  }
-}
-
 fn Fixture::from_api_entry(data: Dynamic) Fixture![decode::Error] {
   let id = try decode::run(data, decode::path(["fixture", "id"], decode::int))
   let timestamp = try decode::run(data, decode::path(["fixture", "timestamp"], decode::int))
@@ -824,7 +757,7 @@ fn Fixture::from_api_entry(data: Dynamic) Fixture![decode::Error] {
   Result::ok(Fixture{
     id: id,
     season: league.season,
-    timestamp: timestamp,
+    timestamp: timestamp * 1000, // API-football returns the seconds, so normalize to milliseconds
     league_id: league.id,
     league: League{id: league.id, name: league.name},
     finished: finished,
@@ -833,6 +766,37 @@ fn Fixture::from_api_entry(data: Dynamic) Fixture![decode::Error] {
     home_goals: home_goals.or(0),
     away_goals: away_goals.or(0),
   })
+}
+
+// retrieves all fixtures happening today from API-Football
+fn find_today() [Fixture] {
+  let today = dates::get_today()
+  let req = http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/fixtures?status=NS&timezone=America/New_York&date={today}",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+      "Accept": "application/json",
+    ],
+  }
+
+  let res = try http::send(req) -> err {
+    io::print("Error fetching today's fixtures: {err}")
+    List::new<Fixture>()
+  }
+
+  match decode::from_json(res.body) {
+    ok(body) => {
+      try decode::run(body, decode::field("response", decode::list(Fixture::from_api_entry))) -> errs {
+        io::print("Error decoding body.response: {errs.at(0)}")
+        List::new<Fixture>()
+      }
+    },
+    err => {
+      io::print("Invalid JSON returned for today's fixtures: {err}")
+      List::new<Fixture>()
+    }
+  }
 }
 
 fn find_from_api(db: sql::Database, team_id: Int, league_id: Int, season: Int) [Fixture]!Str {
