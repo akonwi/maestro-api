@@ -1,0 +1,70 @@
+use ard/decode
+use ard/http
+use ard/maybe
+use ard/sql
+
+use maestro/config
+
+fn collapse_errors(prefix: Str, errors: [decode::Error]) Str {
+  mut msg = prefix
+  for e in errors {
+    msg = "{msg}: {e}"
+  }
+  msg
+}
+
+struct Team { id: Int, name: Str }
+
+impl Team {
+  fn to_dyn() Dynamic {
+    Dynamic::object([
+      "id": Dynamic::from(@id),
+      "name": Dynamic::from(@name),
+    ])
+  }
+}
+
+fn Team::from_row(row: Dynamic) Team!Str {
+  let id = try decode::run(row, decode::field("id", decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+  let name = try decode::run(row, decode::field("name", decode::string)) -> errs { Result::err(errs.at(0).to_str()) }
+
+  Result::ok(Team{ id: id, name: name })
+}
+
+fn Team::from_api(data: Dynamic) Team!Str {
+  let id = try decode::run(data, decode::path(["team", "id"], decode::int)) -> errs { Result::err(errs.at(0).to_str()) }
+  let name = try decode::run(data, decode::path(["team", "name"], decode::string)) -> errs { Result::err(errs.at(0).to_str()) }
+
+  Result::ok(Team{ id: id, name: name })
+}
+
+fn fetch(id: Int) Team?!Str {
+  let req = http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/teams?id={id}",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+      "Accept": "application/json",
+    ],
+  }
+
+  let res = try http::send(req) -> err { Result::err("Error fetching team (id={id}): {err}") }
+  let body = try decode::from_json(res.body) -> found { Result::err("Unable to parse response body as JSON (team={id}). Found {found}") }
+  let entry = try decode::run(body, decode::field("response", decode::at(0, decode::dynamic))) -> errs {
+    Result::err(collapse_errors("Could not decode response[0] in data for team({id})", errs))
+  }
+
+  let team = try Team::from_api(entry)
+  Result::ok(maybe::some(team))
+}
+
+fn get(db: sql::Database, id: Int) Team?!Str {
+  let found = try db.query("SELECT * from teams where id = @id").first(["id":id])
+  match found {
+    row => {
+      let team = try Team::from_row(row)
+      Result::ok(maybe::some(team))
+    },
+    _ => fetch(id)
+  }
+}

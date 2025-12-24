@@ -8,6 +8,7 @@ use ard/sql
 
 use maestro/config
 use maestro/leagues
+use maestro/teams
 
 // todo: put this in ard/decode
 fn dynamic(data: Dynamic) Dynamic![decode::Error] {
@@ -21,17 +22,6 @@ fn collapse_errors(prefix: Str, errors: [decode::Error]) Str {
     msg = "{msg}: {e}"
   }
   msg
-}
-
-struct Team { id: Int, name: Str }
-
-impl Team {
-  fn to_dyn() Dynamic {
-    Dynamic::object([
-      "id": Dynamic::from(@id),
-      "name": Dynamic::from(@name),
-    ])
-  }
 }
 
 struct League {
@@ -55,8 +45,8 @@ struct Fixture {
   season: Int,
   timestamp: Int,
   finished: Bool,
-  home: Team,
-  away: Team,
+  home: teams::Team,
+  away: teams::Team,
   home_goals: Int,
   away_goals: Int,
 }
@@ -116,8 +106,8 @@ fn from_row(row: Dynamic) Fixture![decode::Error] {
   let home_name = try decode_home_name(row)
   let away_id = try decode_away_id(row)
   let away_name = try decode_away_name(row)
-  let home = Team{id: home_id, name: home_name}
-  let away = Team{id: away_id, name: away_name}
+  let home = teams::Team{id: home_id, name: home_name}
+  let away = teams::Team{id: away_id, name: away_name}
   let home_goals = try decode_home_goals(row)
   let away_goals = try decode_away_goals(row)
 
@@ -253,17 +243,17 @@ let empty_stats = TeamStats{
   red_cards: 0,
 }
 
-fn decode_team(entry: Dynamic) Team![decode::Error] {
+fn decode_team(entry: Dynamic) teams::Team![decode::Error] {
   let id = try decode::run(entry, decode::field("id", decode::int))
   let name = try decode::run(entry, decode::field("name", decode::string))
-  Result::ok(Team{id: id, name: name})
+  Result::ok(teams::Team{id: id, name: name})
 }
 
 struct FixtureStats {
   fixture: Fixture,
   home: TeamStats,
   away: TeamStats,
-  teams: [Team]
+  teams: [teams::Team]
 }
 
 fn decode_team_stats(entry: Dynamic) TeamStats![decode::Error] {
@@ -402,7 +392,7 @@ fn decode_stats(entry: Dynamic) FixtureStats![decode::Error] {
   })
 }
 
-fn save_teams(db: sql::Database, tx: sql::Transaction, teams: [Team]) Void!Str {
+fn save_teams(db: sql::Database, tx: sql::Transaction, teams: [teams::Team]) Void!Str {
   for team in teams {
     let row = try db.query("SELECT id FROM teams where id = @id").first(["id": team.id])
     if row.is_none() {

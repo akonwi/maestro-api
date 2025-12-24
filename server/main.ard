@@ -11,6 +11,7 @@ use maestro/db
 use maestro/fixtures
 use maestro/leagues
 use maestro/predictions
+use maestro/teams
 
 let X_API_TOKEN = "X-Api-Token"
 
@@ -257,6 +258,26 @@ fn main() {
               }
             }
           },
+          _ => not_found
+        }
+      },
+
+      "/teams/:id": fn(req: http::Request) http::Response {
+        match req.method {
+          http::Method::Get => {
+            let id = try Int::from_str(req.path_param("id")) -> _ {
+              mut headers = res_headers
+              headers.drop("Content-Type")
+              http::Response{status: 400, body: "Invalid team id", headers: headers}
+            }
+            let found = try teams::get(conn, id) -> internal_error
+            let team = try found -> _ { not_found }
+            match json::encode(team) {
+              ok(body) => http::Response{status:200, body:body, headers:res_headers},
+              err => internal_error(err)
+            }
+          },
+          http::Method::Options => empty_200(),
           _ => not_found
         }
       },
