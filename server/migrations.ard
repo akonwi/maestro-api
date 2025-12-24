@@ -5,10 +5,6 @@ use ard/fs
 use ard/sql
 use ard/decode
 
-struct Migration {
-  name: Str,
-}
-
 fn connect() sql::Database {
   let db_path = env::get("DB_PATH").or("./db.sqlite")
   sql::open(db_path).expect("Failed to connect to database")
@@ -53,14 +49,18 @@ fn record_migration(db: sql::Database, name: Str, batch: Int) Void!Str {
   Result::ok(())
 }
 
-fn get_all_migrations() [Migration] {
-  // Manually list migrations since directory listing isn't available in stdlib
-  // Add new migrations here in order
-  mut migrations: [Migration] = []
-  migrations.push(Migration{ name: "001_initial_schema" })
-  migrations.push(Migration{ name: "002_add_fixture_team_fks" })
-  // migrations.push(Migration{ name: "003_add_column" })
-  migrations
+fn get_all_migrations() [Str]!Str {
+  let entries = try fs::list_dir("migrations")
+
+  mut migrations: [Str] = []
+  for entry in entries {
+    if entry.is_file and entry.name.contains(".up.sql") {
+      let name = entry.name.split(".").at(0)
+      migrations.push(name)
+    }
+  }
+
+  Result::ok(migrations)
 }
 
 fn get_latest_batch(db: sql::Database) Int!Str {
@@ -99,19 +99,19 @@ fn remove_migration(db: sql::Database, name: Str) Void!Str {
 fn run_up(db: sql::Database) Void!Str {
   try init_migrations_table(db)
 
-  let all_migrations = get_all_migrations()
+  let all_migrations = try get_all_migrations()
 
   mut applied_count = 0
-  for migration in all_migrations {
-    let is_applied = try check_migration_applied(db, migration.name)
+  for name in all_migrations {
+    let is_applied = try check_migration_applied(db, name)
 
     match is_applied {
       false => {
-        let sql = try read_migration_sql(migration.name, "up")
+        let sql = try read_migration_sql(name, "up")
         try db.exec(sql)
         let batch = try get_latest_batch(db)
-        try record_migration(db, migration.name, batch + 1)
-        io::print("[UP] {migration.name}")
+        try record_migration(db, name, batch + 1)
+        io::print("[UP] {name}")
         applied_count =+ 1
       },
       true => {}
@@ -168,24 +168,24 @@ fn get_applied_migrations(db: sql::Database) [Str]!Str {
 fn get_status(db: sql::Database) Void!Str {
   try init_migrations_table(db)
 
-  let all_migrations = get_all_migrations()
+  let all_migrations = try get_all_migrations()
   let applied = try get_applied_migrations(db)
 
   io::print("=== Migration Status ===")
-  for migration in all_migrations {
+  for name in all_migrations {
     mut found = false
     for applied_name in applied {
-      if migration.name == applied_name {
+      if name == applied_name {
         found = true
       }
     }
 
     match found {
       true => {
-        io::print("[APPLIED] {migration.name}")
+        io::print("[APPLIED] {name}")
       },
       false => {
-        io::print("[PENDING] {migration.name}")
+        io::print("[PENDING] {name}")
       }
     }
   }
