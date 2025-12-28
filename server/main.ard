@@ -332,10 +332,138 @@ fn main() {
             }
 
             let data = try fixtures::find(db: conn, team_id: team_id, league_id: league_id, season: season) -> internal_error
-            let formatted = Dynamic::list(data, fn (f: fixtures::Fixture) Dynamic {
-              f.to_dynamic()
-            })
+            let formatted = Dynamic::list(data, fn (f) { f.to_dynamic() })
             match json::encode(formatted) {
+              ok(body) => http::Response{status:200, body:body, headers:res_headers},
+              err => internal_error(err)
+            }
+          },
+          http::Method::Options => empty_200(),
+          _ => not_found
+        }
+      },
+
+      // overall performance data in a league (+ season)
+      "/teams/:id/performance": fn(req: http::Request) http::Response {
+        match req.method {
+          http::Method::Get => {
+            let team_id = try Int::from_str(req.path_param("id")) -> _ {
+              mut headers = res_headers
+              headers.drop("Content-Type")
+              http::Response{status: 400, body: "Invalid team id", headers: headers}
+            }
+            let league_id = try Int::from_str(req.query_param("league_id")) -> _ {
+              mut headers = res_headers
+              headers.drop("Content-Type")
+              http::Response{status: 400, body: "Invalid league_id parameter", headers: headers}
+            }
+            let season = Int::from_str(req.query_param("season")).or(config::CURRENT_SEASON)
+
+            let maybe_league = try leagues::get(conn, league_id) -> internal_error
+            let league = try maybe_league -> _ { not_found }
+
+            let all_fixtures = try fixtures::find(db: conn, team_id: team_id, league_id: league_id, season: season) -> internal_error
+            let played_fixtures = List::keep(all_fixtures, fn(f) { f.finished })
+            mut played_home_fixture_count = 0
+            mut played_away_fixture_count = 0
+            mut wins_home = 0
+            mut wins_away = 0
+            mut draws_home = 0
+            mut draws_away = 0
+            mut losses_home = 0
+            mut losses_away = 0
+            mut goals_for_home = 0
+            mut goals_for_away = 0
+            mut goals_against_home = 0
+            mut goals_against_away = 0
+            mut cleansheets_home = 0
+            mut cleansheets_away = 0
+            mut failed_to_score_home = 0
+            mut failed_to_score_away = 0
+
+            for f in played_fixtures {
+              match f.home.id == team_id {
+                true => {
+                  // is home team
+                  played_home_fixture_count =+ 1
+                  goals_for_home =+ f.home_goals
+                  goals_against_home =+ f.away_goals
+                  if f.home_goals == 0 { failed_to_score_home =+ 1 }
+                  if f.away_goals == 0 { cleansheets_home =+ 1 }
+                  match {
+                    f.is_home_win() => { wins_home =+ 1 },
+                    f.is_away_win() => { losses_home =+ 1 },
+                    _ => { draws_home =+ 1 }
+                  }
+                },
+                false => {
+                  // is away team
+                  played_away_fixture_count =+ 1
+                  goals_for_away =+ f.away_goals
+                  goals_against_away =+ f.home_goals
+                  if f.away_goals == 0 { failed_to_score_away =+ 1 }
+                  if f.home_goals == 0 { cleansheets_away =+ 1 }
+                  match {
+                    f.is_home_win() => { losses_away =+ 1 },
+                    f.is_away_win() => { wins_away =+ 1 },
+                    _ => { draws_away =+ 1 }
+                  }
+                }
+              }
+            }
+
+            let data = Dynamic::object([
+              "league": league.to_dyn(),
+              "fixtures": Dynamic::object([
+                "all": Dynamic::list(all_fixtures, fn (f: fixtures::Fixture) Dynamic {
+                  f.to_dynamic()
+                }),
+                "played": Dynamic::object([
+                  "home": Dynamic::from(played_home_fixture_count),
+                  "away": Dynamic::from(played_away_fixture_count),
+                  "total": Dynamic::from(played_home_fixture_count + played_away_fixture_count),
+                ]),
+                "wins": Dynamic::object([
+                  "home": Dynamic::from(wins_home),
+                  "away": Dynamic::from(wins_away),
+                  "total": Dynamic::from(wins_home + wins_away),
+                ]),
+                "draws": Dynamic::object([
+                  "home": Dynamic::from(draws_home),
+                  "away": Dynamic::from(draws_away),
+                  "total": Dynamic::from(draws_home + draws_away),
+                ]),
+                "losses": Dynamic::object([
+                  "home": Dynamic::from(losses_home),
+                  "away": Dynamic::from(losses_away),
+                  "total": Dynamic::from(losses_home + losses_away),
+                ]),
+              ]),
+              "goals": Dynamic::object([
+                "for": Dynamic::object([
+                  "home": Dynamic::from(goals_for_home),
+                  "away": Dynamic::from(goals_for_away),
+                  "total": Dynamic::from(goals_for_home + goals_for_away),
+                ]),
+                "against": Dynamic::object([
+                  "home": Dynamic::from(goals_against_home),
+                  "away": Dynamic::from(goals_against_away),
+                  "total": Dynamic::from(goals_against_home + goals_against_away),
+                ]),
+              ]),
+              "cleansheets": Dynamic::object([
+                "home": Dynamic::from(cleansheets_home),
+                "away": Dynamic::from(cleansheets_away),
+                "total": Dynamic::from(cleansheets_home + cleansheets_away),
+              ]),
+              "failed_to_score": Dynamic::object([
+                "home": Dynamic::from(failed_to_score_home),
+                "away": Dynamic::from(failed_to_score_away),
+                "total": Dynamic::from(failed_to_score_home + failed_to_score_away),
+              ]),
+            ])
+
+            match json::encode(data) {
               ok(body) => http::Response{status:200, body:body, headers:res_headers},
               err => internal_error(err)
             }

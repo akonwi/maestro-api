@@ -1,5 +1,7 @@
 use ard/env
 
+let CURRENT_SEASON = 2025
+
 // key for API-Football and will act as a password for writing data
 fn api_key() Str {
   env::get("API_KEY").expect("API_KEY environment variable not set")

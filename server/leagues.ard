@@ -1,6 +1,7 @@
 use ard/decode
 use ard/http
 use ard/io
+use ard/maybe
 use ard/sql
 
 use maestro/config
@@ -8,22 +9,51 @@ use maestro/config
 struct League {
   id: Int,
   name: Str,
+  // unless explcitly set to true in the db, the league will by followed (synced on a regular basis)
   hidden: Bool,
+
+  // if it's in the database & not hidden, it's being followed
+  following: Bool,
 }
 
+impl League {
+  fn to_dyn() Dynamic {
+    Dynamic::object([
+      "id": Dynamic::from(@id),
+      "name": Dynamic::from(@name),
+      "hidden": Dynamic::from(@hidden),
+      "following": Dynamic::from(@following),
+    ])
+  }
+}
+
+// decoders for db row
 let decode_id = decode::field("id", decode::int)
 let decode_name = decode::field("name", decode::string)
 let decode_hidden = decode::field("hidden", decode::bool)
 
-fn decode_league(data: Dynamic) League![decode::Error] {
-  let id = try decode_id(data)
-  let name = try decode_name(data)
-  let hidden = try decode_hidden(data)
+fn League::from_row(row: Dynamic) League!Str {
+  let id = try decode_id(row) -> errs { Result::err(errs.at(0).to_str()) }
+  let name = try decode_name(row) -> errs { Result::err(errs.at(0).to_str()) }
+  let hidden = try decode_hidden(row) -> errs { Result::err(errs.at(0).to_str()) }
 
   Result::ok(League{
     id: id,
     name: name,
     hidden: hidden,
+    following: true,
+  })
+}
+
+fn League::from_api(data: Dynamic) League!Str {
+  let id = try decode_id(data) -> errs { Result::err(errs.at(0).to_str()) }
+  let name = try decode_name(data) -> errs { Result::err(errs.at(0).to_str()) }
+
+  Result::ok(League{
+    id: id,
+    name: name,
+    hidden: false,
+    following: false
   })
 }
 
@@ -31,9 +61,7 @@ fn get_all(db: sql::Database) [League]!Str {
   let rows = try db.query("SELECT * FROM leagues").all([:])
   mut leagues: [League] = []
   for row in rows {
-    let league = try decode_league(row) -> errs {
-      Result::err(errs.at(0).to_str())
-    }
+    let league = try League::from_row(row)
     leagues.push(league)
   }
   Result::ok(leagues)
@@ -57,7 +85,7 @@ fn get_active(db: sql::Database) [League]!Str {
   let rows = try db.query("SELECT * FROM leagues WHERE hidden = false").all([:])
   mut leagues = List::new<League>()
   for row in rows {
-    let l = try decode_league(row) -> errs { Result::err("Unable to decode league row: {errs.at(0)}")  }
+    let l = try League::from_row(row)
     leagues.push(l)
   }
   Result::ok(leagues)
@@ -125,4 +153,42 @@ fn get_current_season(id: Int) Int!Str {
   }
 
   Result::ok(season)
+}
+
+fn fetch(id: Int) League!Str {
+  let req = http::Request{
+    method: http::Method::Get,
+    url: "https://v3.football.api-sports.io/leagues?id={id}",
+    headers: [
+      "x-rapidapi-key": config::api_key(),
+    ],
+  }
+
+  let res = try http::send(req) -> err { Result::err("Error fetching fixtures: {err}") }
+  let body = try decode::from_json(res.body) -> found { Result::err("Unable to parse response body as JSON. Found {found}") }
+
+  let data = try decode::run(
+    body,
+    decode::field("response", decode::at(0, decode::field("league", decode::dynamic))),
+  ) -> errs {
+    Result::err(errs.at(0).to_str())
+  }
+
+  let league = try League::from_api(data)
+
+  Result::ok(league)
+}
+
+fn get(db: sql::Database, id: Int) League?!Str {
+  let got = try db.query("SELECT * FROM leagues WHERE id = @id").first(["id":id])
+  match got {
+    row => {
+      let league = try League::from_row(row)
+      Result::ok(maybe::some(league))
+    },
+    _ => {
+      let league = try fetch(id)
+      Result::ok(maybe::some(league))
+    }
+  }
 }
