@@ -364,7 +364,7 @@ fn decode_stats(entry: Dynamic) FixtureStats![decode::Error] {
     league_id: league_id,
     league: League{id: league_id, name: league_name},
     season: season,
-    timestamp: timestamp,
+    timestamp: timestamp * 1000, // API-football returns the seconds, so normalize to milliseconds
     finished: is_finished,
     home: home,
     away: away,
