@@ -2,7 +2,8 @@
 set -e
 
 echo "Running migrations..."
-ard run server/migrations.ard up
+cd server
+ard run migrations.ard up
 
 echo "Starting server..."
-exec ard run server/main.ard
+exec ard run main.ard
