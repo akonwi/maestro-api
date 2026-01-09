@@ -11,11 +11,6 @@ use maestro/leagues
 use maestro/teams
 
 // todo: put this in ard/decode
-fn dynamic(data: Dynamic) Dynamic![decode::Error] {
-  Result::ok(data)
-}
-
-// todo: put this in ard/decode
 fn collapse_errors(prefix: Str, errors: [decode::Error]) Str {
   mut msg = prefix
   for e in errors {
@@ -196,7 +191,7 @@ fn fetch(id: Int) Dynamic!Str {
 
   let res = try http::send(req) -> err { Result::err("Error fetching fixture (id={id}): {err}") }
   let body = try decode::from_json(res.body) -> found { Result::err("Unable to parse response body as JSON (league={id}). Found {found}") }
-  let entry = try decode::run(body, decode::field("response", decode::at(0, dynamic))) -> errs {
+  let entry = try decode::run(body, decode::field("response", decode::at(0, decode::dynamic))) -> errs {
     Result::err(collapse_errors("Could not decode response[0] in data for fixture({id})", errs))
   }
   Result::ok(entry)
@@ -693,10 +688,11 @@ fn sync(db: sql::Database) {
     let all_leagues = try leagues::get_active(db) -> err { io::print("Unable to get followed leagues for fixture sync: {err}") }
 
     for league, i in all_leagues {
-      io::print("[{i}/{all_leagues.size()}] Getting current season for {league.name} (id: {league.id})")
+      let count = i + 1
+      io::print("[{count}/{all_leagues.size()}] Getting current season for {league.name} (id: {league.id})")
       match leagues::get_current_season(league.id) {
         ok(season) => {
-          io::print("[{i}/{all_leagues.size()}] Syncing {league.name} (id: {league.id}, season: {season})")
+          io::print("[{count}/{all_leagues.size()}] Syncing {league.name} (id: {league.id}, season: {season})")
           sync_season(db: db, league_id: league.id, season: season)
         },
         err => io::print("Unable to get current season for league {league.id}: {err}")
