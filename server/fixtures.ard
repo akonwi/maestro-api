@@ -688,19 +688,24 @@ fn sync_season(db: sql::Database, league_id: Int, season: Int) {
 }
 
 fn sync(db: sql::Database) {
-  let all_leagues = try leagues::get_active(db) -> err { io::print("Unable to get followed leagues for fixture sync: {err}") }
-  for league in all_leagues {
-    match leagues::get_current_season(league.id) {
-      ok(season) => {
-        io::print("Syncing fixtures in {league.name} ({league.id}) for {season}")
-        sync_season(db: db, league_id: league.id, season: season)
-      },
-      err => io::print("Unable to get current season for league {league.id}: {err}")
-    }
-  }
+  while {
+    io::print("Starting fixture sync...")
+    let all_leagues = try leagues::get_active(db) -> err { io::print("Unable to get followed leagues for fixture sync: {err}") }
 
-  io::print("Finished fixture sync...")
-  async::sleep(duration::from_hours(12))
+    for league, i in all_leagues {
+      io::print("[{i}/{all_leagues.size()}] Getting current season for {league.name} (id: {league.id})")
+      match leagues::get_current_season(league.id) {
+        ok(season) => {
+          io::print("[{i}/{all_leagues.size()}] Syncing {league.name} (id: {league.id}, season: {season})")
+          sync_season(db: db, league_id: league.id, season: season)
+        },
+        err => io::print("Unable to get current season for league {league.id}: {err}")
+      }
+    }
+
+    io::print("Finished fixture sync...")
+    async::sleep(duration::from_hours(12))
+  }
 }
 
 /// Everything below is strictly for data coming directly from API Football
