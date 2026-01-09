@@ -688,7 +688,10 @@ fn sync(db: sql::Database) {
   let all_leagues = try leagues::get_active(db) -> err { io::print("Unable to get followed leagues for fixture sync: {err}") }
   for league in all_leagues {
     match leagues::get_current_season(league.id) {
-      ok(season) => sync_season(db: db, league_id: league.id, season: season),
+      ok(season) => {
+        io::print("Syncing fixtures in {league.name} for {season}")
+        sync_season(db: db, league_id: league.id, season: season)
+      },
       err => io::print("Unable to get current season for league {league.id}: {err}")
     }
   }
