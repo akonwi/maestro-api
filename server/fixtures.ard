@@ -679,7 +679,10 @@ fn sync_season(db: sql::Database, league_id: Int, season: Int) {
     },
     // else, look for incomplete fixtures and update them
     _ => {
-      try sync_fixtures(db: db, league_id: league_id, season: season) ->  err { io::print("Failed to sync fixtures: {err}") }
+      match sync_fixtures(db: db, league_id: league_id, season: season) {
+        ok => io::print("Updated fixtures in {league_id} for {season}"),
+        err => io::print("Failed to update fixtures in {league_id} for {season}: {err}")
+      }
     }
   }
 }
@@ -689,7 +692,7 @@ fn sync(db: sql::Database) {
   for league in all_leagues {
     match leagues::get_current_season(league.id) {
       ok(season) => {
-        io::print("Syncing fixtures in {league.name} for {season}")
+        io::print("Syncing fixtures in {league.name} ({league.id}) for {season}")
         sync_season(db: db, league_id: league.id, season: season)
       },
       err => io::print("Unable to get current season for league {league.id}: {err}")
